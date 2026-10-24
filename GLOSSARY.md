@@ -25,8 +25,12 @@ Eine Sammlung von Medien einer Quelle, die per Link angegeben wird und in einzel
 _Avoid_: Liste, Kanal
 
 **Mediendatei**:
-Die fertige heruntergeladene Datei eines Queue-Eintrags, die auf dem Server liegt und über die App abrufbar ist.
+Die fertige heruntergeladene Datei eines Queue-Eintrags, die auf dem Server liegt und über die App abrufbar ist. Jede Mediendatei gehört zu genau einem Queue-Eintrag.
 _Avoid_: Download, Output
+
+**Duplikat**:
+Ein neuer Queue-Eintrag für dasselbe Medium mit derselben Medienart wie ein wartender oder laufender Queue-Eintrag oder eine vorhandene Mediendatei, unabhängig von der Auflösung. Dasselbe Medium heißt: gleiche Quelle und gleiche Medien-ID, nicht gleicher Link.
+_Avoid_: Doppelter Download, Kopie
 
 **Aufbewahrungsfrist**:
 Die Zeitspanne ab Fertigstellung, nach der eine Mediendatei samt Queue-Eintrag automatisch gelöscht wird.
