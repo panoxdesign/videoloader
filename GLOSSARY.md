@@ -35,3 +35,11 @@ _Avoid_: Doppelter Download, Kopie
 **Aufbewahrungsfrist**:
 Die Zeitspanne ab Fertigstellung, nach der eine Mediendatei samt Queue-Eintrag automatisch gelöscht wird.
 _Avoid_: TTL, Retention, Ablaufzeit
+
+**Startabstand**:
+Die Mindestzeit zwischen zwei Starts von Queue-Einträgen derselben Quelle, damit die Quelle nicht zu viele Anfragen auf einmal bekommt.
+_Avoid_: Pause, Sleep, Wartezeit
+
+**Abkühlphase**:
+Der Zeitraum, in dem nach einem Rate-Limit einer Quelle keine Queue-Einträge dieser Quelle starten. Sie ist unabhängig davon, ob die Queue pausiert ist.
+_Avoid_: Cooldown, Sperre, Pause
