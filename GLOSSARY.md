@@ -16,6 +16,14 @@ _Avoid_: Warteliste, Download-Liste
 Ein einzelnes Medium aus einer Quelle, das mit einer gewählten Medienart heruntergeladen werden soll.
 _Avoid_: Job, Task, Auftrag
 
+**Position**:
+Der Rang eines wartenden Queue-Eintrags in der Queue. „Erneut versuchen" setzt ihn ans Ende, ein Rate-Limit oder ein Neustart lässt ihn unverändert.
+_Avoid_: Platz, Reihenfolge, Index
+
+**Pause**:
+Der vom Nutzer gesetzte Zustand der Queue, in dem keine Queue-Einträge starten. Laufende Queue-Einträge laden zu Ende.
+_Avoid_: Stopp, Anhalten
+
 **Medienart**:
 Die Wahl pro Queue-Eintrag, ob das Medium als Video oder nur als Audio (MP3) heruntergeladen wird.
 _Avoid_: Format, Typ, Modus
@@ -33,7 +41,7 @@ Ein neuer Queue-Eintrag für dasselbe Medium mit derselben Medienart wie ein war
 _Avoid_: Doppelter Download, Kopie
 
 **Aufbewahrungsfrist**:
-Die Zeitspanne ab Fertigstellung, nach der eine Mediendatei samt Queue-Eintrag automatisch gelöscht wird.
+Die Zeitspanne, nach der ein Queue-Eintrag automatisch gelöscht wird: ein fertiger samt Mediendatei ab Fertigstellung, ein fehlgeschlagener oder abgebrochener ab Fehlschlag bzw. Abbruch.
 _Avoid_: TTL, Retention, Ablaufzeit
 
 **Startabstand**:
@@ -43,3 +51,25 @@ _Avoid_: Pause, Sleep, Wartezeit
 **Abkühlphase**:
 Der Zeitraum, in dem nach einem Rate-Limit einer Quelle keine Queue-Einträge dieser Quelle starten. Sie ist unabhängig davon, ob die Queue pausiert ist.
 _Avoid_: Cooldown, Sperre, Pause
+
+### Zustände eines Queue-Eintrags
+
+**Wartend**:
+Der Queue-Eintrag steht in der Queue und startet, sobald er an der Reihe ist und seine Quelle starten darf.
+_Avoid_: Eingereiht, Pending, Pausiert
+
+**Läuft**:
+Der Queue-Eintrag wird gerade heruntergeladen oder nachbearbeitet.
+_Avoid_: Aktiv, In Arbeit
+
+**Fertig**:
+Der Queue-Eintrag hat eine Mediendatei erzeugt.
+_Avoid_: Abgeschlossen, Erledigt
+
+**Fehlgeschlagen**:
+Der Download des Queue-Eintrags ist an einem Fehler gescheitert. Ein Rate-Limit zählt nicht dazu.
+_Avoid_: Fehler, Kaputt
+
+**Abgebrochen**:
+Der Nutzer hat den laufenden Queue-Eintrag gestoppt. Er bleibt ohne Mediendatei in der Queue stehen, anders als ein entfernter Queue-Eintrag, der ganz verschwindet.
+_Avoid_: Storniert, Gecancelt, Entfernt
