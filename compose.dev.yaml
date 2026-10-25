@@ -1,0 +1,21 @@
+# Entwicklung im Container: next dev mit Hot Reload und denselben Binaries wie in Produktion.
+#   docker compose -f compose.dev.yaml up
+#   docker compose -f compose.dev.yaml run --rm app npm run test:integration
+services:
+  app:
+    build:
+      context: .
+      target: dev
+    init: true
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - data:/data
+    # environment:
+    #   WATCHPACK_POLLING: "true"  # falls Änderungen über den Bind-Mount nicht ankommen
+
+volumes:
+  node_modules:
+  data:
