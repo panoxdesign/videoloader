@@ -11,4 +11,4 @@ Der Queue-Worker läuft im selben Node-Prozess wie die Next.js-App. Er wird aus 
 
 - Next fängt SIGTERM ab und beendet den Prozess ohne sauberes Aufräumen. Deshalb gilt Start-Aufräumen als Pflicht: Verwaiste Einträge auf „läuft" werden zurückgesetzt und noch lebende yt-dlp-Prozessgruppen nach PID-Prüfung über `/proc` beendet.
 - Code auf Modulebene darf keine Seiteneffekte haben, weil `next build` ihn ausführt.
-- Details: `.scratch/video-downloader/issues/05-architektur-festlegen.md`, `.scratch/video-downloader/assets/worker-lebenszyklus.md`, `.scratch/video-downloader/assets/spike-singleton.md`.
+- Details zur Architektur-Entscheidung, zum Worker-Lebenszyklus und zum Spike über die Singleton-Teilung stehen in den lokalen Arbeitsnotizen, die nicht im Repo liegen.
