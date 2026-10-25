@@ -39,7 +39,10 @@ export function startWorker(deps: WorkerDeps): Worker {
     while (running.size < SLOTS) {
       const entry = claimNext(deps.db);
       if (!entry) break;
-      const slot = runSlot(deps, entry).finally(() => running.delete(slot));
+      // Ein Fehler im Slot darf den Next-Prozess nicht als unhandled rejection beenden.
+      const slot = runSlot(deps, entry)
+        .catch((error) => console.error(`queue entry ${entry.id}: slot failed`, error))
+        .finally(() => running.delete(slot));
       running.add(slot);
     }
     timer = setTimeout(tick, deps.timing.tickMs);
