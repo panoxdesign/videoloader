@@ -4,26 +4,21 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Evergreen (Design-System, Version 1792841561-8c88) auf die shadcn-Variablen abgebildet,
+ * nach der Zuordnungstabelle im Evergreen-README. Hell unter :root, dunkel unter .dark.
+ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
+  --color-foreground-secondary: var(--foreground-secondary);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -32,96 +27,142 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-link: var(--link);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-code: var(--code);
+  --color-code-foreground: var(--code-foreground);
+
+  /* Radien wachsen mit der Fläche: Menüeinträge, Felder, Karten, Dialoge. */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-elevation-1: var(--elevation-1);
+  --shadow-elevation-2: var(--elevation-2);
+  --shadow-elevation-3: var(--elevation-3);
+
+  --font-sans: "Figtree Variable", system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque Variable", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 1rem;
+
+  --background: #f6f8f2;
+  --foreground: #132a13;
+  --foreground-secondary: #3f5239;
+  --card: #ffffff;
+  --card-foreground: #132a13;
+  --popover: #ffffff;
+  --popover-foreground: #132a13;
+  --primary: #31572c;
+  --primary-hover: #22401f;
+  --primary-foreground: #ffffff;
+  --secondary: #ecf39e;
+  --secondary-foreground: #132a13;
+  --muted: #eef2e6;
+  --muted-foreground: #5c6d55;
+  --accent: #f6fad5;
+  --accent-foreground: #132a13;
+  --destructive: #b3261e;
+  --destructive-hover: #8f1d17;
+  --destructive-foreground: #ffffff;
+  --border: #dde4d0;
+  --border-strong: #c3ceb2;
+  --input: #7f8e76;
+  --ring: #4f772d;
+  --link: #4f772d;
+
+  --success: #e4efc8;
+  --success-foreground: #31572c;
+  --warning: #fdf0c8;
+  --warning-foreground: #8a5a00;
+  --error: #fbe4e1;
+  --error-foreground: #b3261e;
+  --info: #ddeef4;
+  --info-foreground: #1f5f7a;
+  --code: #132a13;
+  --code-foreground: #c9d8bc;
+
+  --elevation-1: 0 1px 2px rgba(19, 42, 19, 0.08), 0 1px 1px rgba(19, 42, 19, 0.04);
+  --elevation-2: 0 6px 16px rgba(19, 42, 19, 0.1), 0 1px 3px rgba(19, 42, 19, 0.06);
+  --elevation-3: 0 24px 48px rgba(19, 42, 19, 0.18), 0 4px 12px rgba(19, 42, 19, 0.08);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0c1a0c;
+  --foreground: #f6f8f2;
+  --foreground-secondary: #c9d8bc;
+  --card: #132a13;
+  --card-foreground: #f6f8f2;
+  --popover: #132a13;
+  --popover-foreground: #f6f8f2;
+  --primary: #ecf39e;
+  --primary-hover: #d0dd88;
+  --primary-foreground: #132a13;
+  --secondary: #31572c;
+  --secondary-foreground: #ecf39e;
+  --muted: #1c381a;
+  --muted-foreground: #a9ba9d;
+  --accent: #254522;
+  --accent-foreground: #f6f8f2;
+  --destructive: #ffb4ab;
+  --destructive-hover: #ff8a80;
+  --destructive-foreground: #2b0f0d;
+  --border: #2b4c27;
+  --border-strong: #3e6638;
+  --input: #6e8864;
+  --ring: #ecf39e;
+  --link: #90a955;
+
+  --success: #1e3a1c;
+  --success-foreground: #bde08a;
+  --warning: #3a2e0a;
+  --warning-foreground: #f2c86b;
+  --error: #3a1512;
+  --error-foreground: #ffb4ab;
+  --info: #12303c;
+  --info-foreground: #8fd0e8;
+  --code: #0c1a0c;
+  --code-foreground: #c9d8bc;
+
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.3);
+  --elevation-2: 0 6px 16px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --elevation-3: 0 24px 48px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Signatur von Evergreen: leere Reste und Platzhalter sind schraffiert (45°, 8-px-Raster, 2 px). */
+@utility bg-hatch {
+  background-image: repeating-linear-gradient(45deg, var(--border-strong) 0 2px, transparent 2px 8px);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
+    @apply border-border;
   }
   html {
-    @apply font-sans;
+    @apply bg-background font-sans;
+  }
+  body {
+    @apply bg-background text-sm text-foreground;
+  }
+  /* Fokus zeigt immer einen Ring von 3 px mit 2 px Abstand. */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
   }
 }

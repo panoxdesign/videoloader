@@ -1,95 +1,76 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
+import type { EntryView } from "@/lib/queue-view";
 import { texts } from "@/lib/texts";
 import { getDb } from "@/server/db";
-import type { QueueEntry } from "@/server/db/schema";
 import { listEntries } from "@/server/queue";
 import { addEntry } from "./actions";
+import { QueueList } from "./queue-list";
 import { RefreshEvery } from "./refresh-every";
 
 export default function Home() {
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8">
-      <h1 className="text-2xl font-semibold">{texts.appName}</h1>
+    <>
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex max-w-[1120px] items-center gap-1 py-1 pr-2 pl-4 sm:px-6 sm:py-2">
+          <h1 className="flex-1 font-display text-[22px] leading-7 font-bold tracking-[-0.01em]">{texts.appName}</h1>
+          {/* Ticket 32: Konto-Menü mit „Log out“ bei aktivem Passwortschutz */}
+          <ThemeToggle />
+        </div>
+      </header>
 
-      <section aria-labelledby="add-title" className="flex flex-col gap-3">
-        <h2 id="add-title" className="text-lg font-medium">
-          {texts.addForm.title}
-        </h2>
-        <form action={addEntry} className="flex gap-2">
+      <main className="mx-auto flex w-full max-w-[1120px] flex-col gap-3 p-4 sm:gap-4 sm:p-6">
+        {/* Mobil dreizeilig (Link, Optionen, „Add“), breit zweizeilig mit „Add“ neben dem Link. */}
+        <form
+          action={addEntry}
+          aria-label={texts.addForm.title}
+          className="grid gap-2 rounded-lg border border-border bg-card p-3 shadow-elevation-1 sm:grid-cols-[1fr_auto] sm:gap-3 sm:p-4"
+        >
+          <label htmlFor="link" className="sr-only">
+            {texts.addForm.linkLabel}
+          </label>
           <Input
+            id="link"
             name="url"
             type="url"
             required
-            aria-label={texts.addForm.linkLabel}
             placeholder={texts.addForm.linkPlaceholder}
+            className="sm:h-13"
           />
-          <Button type="submit">{texts.addForm.add}</Button>
+          {/* Ticket 19: Medienart und Auflösung als zweite Zeile (sm:col-span-2 sm:row-start-2). */}
+          <Button type="submit" size="lg" className="sm:h-13">
+            {texts.addForm.add}
+          </Button>
         </form>
-      </section>
 
-      <section aria-labelledby="queue-title" className="flex flex-col gap-3">
-        <h2 id="queue-title" className="text-lg font-medium">
-          {texts.queue.title}
-        </h2>
+        {/* Tickets 28 und 29: Banner für Pause und Rate-Limit */}
+
         <Suspense>
-          <QueueList />
+          <Queue />
         </Suspense>
         <RefreshEvery ms={1000} />
-      </section>
-    </main>
+      </main>
+    </>
   );
 }
 
-async function QueueList() {
+async function Queue() {
   await connection();
-  const entries = listEntries(getDb());
-  if (entries.length === 0) {
-    return <p className="text-muted-foreground">{texts.queue.empty}</p>;
-  }
-  return (
-    <ul className="flex flex-col gap-2">
-      {entries.map((entry) => (
-        <QueueRow key={entry.id} entry={entry} />
-      ))}
-    </ul>
-  );
-}
-
-function QueueRow({ entry }: { entry: QueueEntry }) {
-  const percent = progressPercent(entry);
-  return (
-    <li className="flex flex-col gap-2 rounded-lg border p-3">
-      <div className="flex items-center justify-between gap-3">
-        <span className="min-w-0 truncate">{entry.title ?? entry.url}</span>
-        <Badge variant="secondary">{texts.states[entry.state]}</Badge>
-      </div>
-      {entry.state === "running" &&
-        (entry.phase === "postprocess" ? (
-          <span className="text-sm text-muted-foreground">{texts.queue.processing}</span>
-        ) : (
-          percent !== undefined && (
-            <div className="flex items-center gap-3">
-              <Progress value={percent} className="flex-1" />
-              <span className="text-sm tabular-nums">{percent} %</span>
-            </div>
-          )
-        ))}
-      {entry.state === "failed" && (
-        <span className="text-sm text-destructive">
-          {texts.errors[entry.errorCategory ?? "other"] ?? texts.errors.other}
-        </span>
-      )}
-    </li>
-  );
-}
-
-function progressPercent(entry: QueueEntry) {
-  const total = entry.totalBytes ?? entry.totalBytesEstimate;
-  if (!total || entry.downloadedBytes === null) return undefined;
-  return Math.min(100, Math.round((entry.downloadedBytes / total) * 100));
+  const entries: EntryView[] = listEntries(getDb()).map((entry) => ({
+    id: entry.id,
+    url: entry.url,
+    title: entry.title,
+    state: entry.state,
+    phase: entry.phase,
+    queuedAt: entry.queuedAt,
+    finishedAt: entry.finishedAt,
+    downloadedBytes: entry.downloadedBytes,
+    totalBytes: entry.totalBytes,
+    totalBytesEstimate: entry.totalBytesEstimate,
+    errorCategory: entry.errorCategory,
+  }));
+  return <QueueList entries={entries} />;
 }
