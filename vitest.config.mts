@@ -21,6 +21,15 @@ export default defineConfig({
           hookTimeout: 120_000,
         },
       },
+      {
+        extends: true,
+        test: {
+          name: "container",
+          include: ["test/container/**/*.test.ts"],
+          testTimeout: 90_000,
+          hookTimeout: 90_000,
+        },
+      },
     ],
   },
 });
