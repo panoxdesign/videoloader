@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, inject, it } from "vitest";
 import { register } from "@/instrumentation";
 import { migrateDb, openDb } from "@/server/db/open";
@@ -15,6 +17,10 @@ describe("register", () => {
 
     await register();
     await register();
+
+    for (const dir of ["downloads", "tmp", "db", "cache", "bin", "config"]) {
+      expect(existsSync(join(dataDir, dir)), dir).toBe(true);
+    }
 
     // Gedrosselt auf etwa 4 s je Download. Ein zweiter Worker hätte nach einem Tick einen zweiten Slot.
     const db = openDb(dataPaths(dataDir).db);

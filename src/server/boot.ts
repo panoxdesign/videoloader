@@ -1,5 +1,8 @@
+import { describeConfig, formatProblems, isTimeZone, parseConfig } from "./config/config";
+import { gatherFacts } from "./config/facts";
 import { migrateDb, openDb } from "./db/open";
-import { dataDirFromEnv, dataPaths } from "./paths";
+import { createLogger } from "./log";
+import { createDataDirs, dataPaths } from "./paths";
 import { PRODUCTION_TIMING, startWorker, systemClock, type Worker } from "./worker/worker";
 
 export const BUNDLED_YTDLP = "/usr/local/bin/yt-dlp";
@@ -8,18 +11,38 @@ export const BUNDLED_YTDLP = "/usr/local/bin/yt-dlp";
 const WORKER_KEY = Symbol.for("videoloader.worker");
 const registry = globalThis as typeof globalThis & { [WORKER_KEY]?: Worker };
 
-/** Öffnet die DB, migriert synchron und stößt den Worker an, ohne auf ihn zu warten. */
+/**
+ * Prüft die Konfiguration, öffnet die DB, migriert synchron und stößt den Worker an,
+ * ohne auf ihn zu warten. Bei ungültiger Konfiguration endet der Prozess mit Exit 1.
+ */
 export function boot() {
   if (registry[WORKER_KEY]) return;
 
-  const dataDir = dataDirFromEnv();
-  const db = openDb(dataPaths(dataDir).db);
+  const result = parseConfig(process.env, gatherFacts(process.env));
+  if (!result.ok) {
+    const zone = process.env.TZ || "UTC";
+    createLogger({ level: "error", timeZone: isTimeZone(zone) ? zone : "UTC" }).error(
+      formatProblems(result.problems),
+    );
+    process.exit(1);
+  }
+
+  const { config } = result;
+  const log = createLogger({ level: config.logLevel, timeZone: config.timeZone });
+  log.info(describeConfig(config));
+  if (config.password === undefined) {
+    log.warn("No password set: anyone who can reach the app can use it. Set APP_PASSWORD or APP_PASSWORD_FILE.");
+  }
+
+  createDataDirs(config.dataDir);
+  const db = openDb(dataPaths(config.dataDir).db);
   migrateDb(db);
   registry[WORKER_KEY] = startWorker({
     db,
     ytDlpPath: BUNDLED_YTDLP,
-    dataDir,
+    dataDir: config.dataDir,
     timing: PRODUCTION_TIMING,
     clock: systemClock,
+    log,
   });
 }

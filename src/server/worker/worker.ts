@@ -5,6 +5,7 @@ import { join, relative, isAbsolute } from "node:path";
 import { createInterface } from "node:readline";
 import type { Db } from "../db/open";
 import { queueEntries, type QueueEntry } from "../db/schema";
+import type { Logger } from "../log";
 import { dataPaths } from "../paths";
 import { buildDownloadArgs } from "./args";
 import { parseLine, type DoneLine } from "./parse-line";
@@ -22,6 +23,7 @@ export type WorkerDeps = {
   dataDir: string;
   timing: Timing;
   clock: Clock;
+  log: Logger;
 };
 
 export type Worker = { stop(): Promise<void> };
@@ -41,7 +43,7 @@ export function startWorker(deps: WorkerDeps): Worker {
       if (!entry) break;
       // Ein Fehler im Slot darf den Next-Prozess nicht als unhandled rejection beenden.
       const slot = runSlot(deps, entry)
-        .catch((error) => console.error(`queue entry ${entry.id}: slot failed`, error))
+        .catch((error) => deps.log.error(`queue entry ${entry.id}: slot failed: ${error?.stack ?? error}`))
         .finally(() => running.delete(slot));
       running.add(slot);
     }
@@ -79,7 +81,7 @@ function claimNext(db: Db): QueueEntry | undefined {
   });
 }
 
-async function runSlot({ db, ytDlpPath, dataDir, clock }: WorkerDeps, entry: QueueEntry) {
+async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry: QueueEntry) {
   const paths = dataPaths(dataDir);
   const tmpDir = join(paths.tmp, String(entry.id));
   const update = (values: Partial<QueueEntry>) =>
@@ -97,6 +99,7 @@ async function runSlot({ db, ytDlpPath, dataDir, clock }: WorkerDeps, entry: Que
       tmpDir,
       cacheDir: paths.cache,
     });
+    log.debug(`queue entry ${entry.id}: ${[ytDlpPath, ...args].map(shellQuote).join(" ")}`);
     const child = spawn(ytDlpPath, args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
     if (child.pid) update({ pgid: child.pid });
 
@@ -150,4 +153,9 @@ async function runSlot({ db, ytDlpPath, dataDir, clock }: WorkerDeps, entry: Que
 function isInside(dir: string, file: string) {
   const rel = relative(dir, file);
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+/** Für die Debug-Zeile: der Aufruf lässt sich so in eine Shell kopieren. */
+function shellQuote(arg: string) {
+  return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", `'\\''`)}'`;
 }
