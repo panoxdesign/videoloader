@@ -1,11 +1,12 @@
 import { and, asc, eq } from "drizzle-orm";
 import { spawn } from "node:child_process";
-import { mkdir, rm } from "node:fs/promises";
-import { join, relative, isAbsolute } from "node:path";
+import { mkdir, rm, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { parseMedia } from "@/lib/media";
 import type { Db } from "../db/open";
 import { queueEntries, type QueueEntry } from "../db/schema";
+import { isInside } from "../files/inside";
 import type { Logger } from "../log";
 import { dataPaths } from "../paths";
 import { buildDownloadArgs } from "./args";
@@ -143,6 +144,7 @@ async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry
         state: "done",
         title: done.title,
         filePath: done.filepath,
+        fileSize: await stat(done.filepath).then((s) => s.size, () => null),
         finishedAt: clock.now(),
         pgid: null,
       });
@@ -152,11 +154,6 @@ async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry
     }
     await rm(tmpDir, { recursive: true, force: true });
   }
-}
-
-function isInside(dir: string, file: string) {
-  const rel = relative(dir, file);
-  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }
 
 /** Für die Debug-Zeile: der Aufruf lässt sich so in eine Shell kopieren. */

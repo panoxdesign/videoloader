@@ -40,6 +40,8 @@ export const queueEntries = sqliteTable(
 
     pgid: integer(),
     filePath: text(),
+    /** In Bytes, gemessen bei Fertigstellung. */
+    fileSize: integer(),
     errorCategory: text(),
   },
   (t) => [

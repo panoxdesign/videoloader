@@ -47,3 +47,43 @@ test("a link added as MP3 finishes as audio", async ({ page }) => {
   await expect(entry).toContainText("Done", { timeout: 60_000 });
   await expect(entry).toContainText("Audio · MP3");
 });
+
+test("a done entry downloads under its file name and is deleted after confirmation", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("textbox", { name: "Link" }).fill(`${fixtureUrl}/videos/umlaut-clip`);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+
+  const title = "Grüße aus Köln/Zürich: Café & Crème brûlée?";
+  const entry = page.getByRole("listitem").filter({ hasText: title });
+  await expect(entry).toContainText("Done", { timeout: 60_000 });
+  await expect(entry).toContainText(/Video · Best · [\d.]+ (kB|MB)/);
+
+  const link = entry.getByRole("link", { name: "Download" });
+  const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);
+  // yt-dlp ersetzt mit `--windows-filenames` „/“, „:“ und „?“ durch Vollbreiten-Zeichen.
+  expect(download.suggestedFilename()).toBe("Grüße aus Köln⧸Zürich： Café & Crème brûlée？ [umlaut-clip].mp4");
+
+  const href = (await link.getAttribute("href"))!;
+  const whole = await page.request.get(href);
+  expect(whole.status()).toBe(200);
+  const size = Number(whole.headers()["content-length"]);
+  const part = await page.request.get(href, { headers: { range: "bytes=10-19" } });
+  expect(part.status()).toBe(206);
+  expect(part.headers()["content-range"]).toBe(`bytes 10-19/${size}`);
+  expect(await part.body()).toEqual((await whole.body()).subarray(10, 20));
+
+  await entry.getByRole("button", { name: "Delete" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Delete this file?" });
+  await expect(dialog).toContainText(`“${title}” (`);
+  await expect(dialog).toContainText("This can't be undone.");
+  // Abbrechen lässt alles stehen.
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(entry).toBeVisible();
+
+  await entry.getByRole("button", { name: "Delete" }).click();
+  await dialog.getByRole("button", { name: "Delete" }).click();
+  await expect(entry).toHaveCount(0);
+  expect((await page.request.get(href)).status()).toBe(404);
+});

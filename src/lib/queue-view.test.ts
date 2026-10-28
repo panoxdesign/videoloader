@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EntryState } from "@/server/db/schema";
 import {
   countByFilter,
+  formatSize,
   matchesFilter,
   progressFraction,
   queuePositions,
@@ -25,6 +26,8 @@ function entry(id: number, state: EntryState, queuedAt: number, finishedAt: numb
     totalBytes: null,
     totalBytesEstimate: null,
     errorCategory: null,
+    fileSize: null,
+    fileMissing: false,
   };
 }
 
@@ -96,5 +99,23 @@ describe("progressFraction", () => {
   it("is undefined without a known size", () => {
     expect(progressFraction({ downloadedBytes: 50, totalBytes: null, totalBytesEstimate: null })).toBeUndefined();
     expect(progressFraction({ downloadedBytes: null, totalBytes: 100, totalBytesEstimate: null })).toBeUndefined();
+  });
+});
+
+describe("formatSize", () => {
+  it.each([
+    [512, "512 byte"],
+    [212_480, "212 kB"],
+    [6_100_000, "6.1 MB"],
+    [286_000_000, "286 MB"],
+    [1_940_000_000, "1.9 GB"],
+    [12_400_000_000, "12 GB"],
+  ])("formats %i bytes as %s", (bytes, text) => {
+    expect(formatSize(bytes, "en")).toBe(text);
+  });
+
+  it("follows the locale", () => {
+    // Mit geschütztem Leerzeichen vor der Einheit.
+    expect(formatSize(1_940_000_000, "de")).toBe("1,9\u00a0GB");
   });
 });

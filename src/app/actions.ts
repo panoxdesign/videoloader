@@ -5,6 +5,7 @@ import { parseMedia } from "@/lib/media";
 import { texts } from "@/lib/texts";
 import { CHECK_TIMEOUT_MS, checkLink } from "@/server/check/check";
 import { getDb } from "@/server/db";
+import { deleteDoneEntry } from "@/server/files/media-file";
 import { BUNDLED_YTDLP, dataDirFromEnv, dataPaths } from "@/server/paths";
 import { enqueue } from "@/server/queue";
 
@@ -30,4 +31,11 @@ export async function addEntry(_previous: AddState, formData: FormData): Promise
   enqueue(getDb(), url, media, Date.now(), result.media);
   refresh();
   return {};
+}
+
+/** Löscht einen fertigen Eintrag samt Mediendatei. */
+export async function deleteEntry(id: number) {
+  if (!Number.isSafeInteger(id)) return;
+  await deleteDoneEntry(getDb(), dataPaths(dataDirFromEnv()).downloads, id);
+  refresh();
 }

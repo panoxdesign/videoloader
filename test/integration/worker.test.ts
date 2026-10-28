@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, inject, it, onTestFinished } from "vitest";
@@ -54,6 +54,7 @@ describe("worker", () => {
     const mediaFile = join(dataPaths(dataDir).downloads, "Clip One [clip-one].mp4");
     expect(entry).toMatchObject({ state: "done", title: "Clip One", filePath: mediaFile });
     expect(existsSync(mediaFile)).toBe(true);
+    expect(entry.fileSize).toBe(statSync(mediaFile).size);
     expect(existsSync(join(dataPaths(dataDir).tmp, String(entry.id)))).toBe(false);
     // Bei LOG_LEVEL=debug steht der vollständige Aufruf im Log.
     expect(lines.find((line) => line.includes(" DEBUG ") && line.includes(YTDLP))).toContain(`-- ${url}`);

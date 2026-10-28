@@ -17,7 +17,11 @@ export type EntryView = Pick<
   | "totalBytes"
   | "totalBytesEstimate"
   | "errorCategory"
->;
+  | "fileSize"
+> & {
+  /** Fertig, aber die Mediendatei fehlt auf der Platte. Kein eigener Zustand. */
+  fileMissing: boolean;
+};
 
 export const FILTERS = ["all", "active", "done", "failedCancelled"] as const;
 export type Filter = (typeof FILTERS)[number];
@@ -72,4 +76,21 @@ export function progressFraction({
   const total = totalBytes ?? totalBytesEstimate;
   if (!total || downloadedBytes === null) return undefined;
   return Math.min(1, downloadedBytes / total);
+}
+
+const SIZE_UNITS = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte"] as const;
+
+/** Dezimale Einheiten wie im Design, z. B. „286 MB“ und „1.9 GB“. Unter 10 mit einer Nachkommastelle. */
+export function formatSize(bytes: number, locale?: string) {
+  let value = bytes;
+  let unit = 0;
+  while (unit < SIZE_UNITS.length - 1 && Math.round(value * 10) / 10 >= 1000) {
+    value /= 1000;
+    unit++;
+  }
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: SIZE_UNITS[unit],
+    maximumFractionDigits: unit > 0 && value < 10 ? 1 : 0,
+  }).format(value);
 }

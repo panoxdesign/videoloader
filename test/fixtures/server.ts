@@ -16,6 +16,8 @@ const PAGES: Record<string, { title: string }> = {
   "clip-two": { title: "Clip Two" },
   "clip-three": { title: "Clip Three" },
   "clip-four": { title: "Clip Four" },
+  // Umlaute und Zeichen, die `--windows-filenames` ersetzt, für Dateinamen im Download.
+  "umlaut-clip": { title: "Grüße aus Köln/Zürich: Café & Crème brûlée?" },
 };
 
 export type FixtureServer = { url: string; close(): Promise<void> };
@@ -40,12 +42,13 @@ export async function startFixtureServer(options: {
     if (page && PAGES[page[1]]) {
       const rate = url.searchParams.get("rate");
       const media = `${origin}/media/${page[1]}.mp4${rate ? `?rate=${rate}` : ""}`;
+      const title = escapeHtml(PAGES[page[1]].title);
       res.setHeader("content-type", "text/html; charset=utf-8");
       res.end(`<!doctype html>
 <html>
   <head>
-    <title>${PAGES[page[1]].title}</title>
-    <meta property="og:title" content="${PAGES[page[1]].title}">
+    <title>${title}</title>
+    <meta property="og:title" content="${title}">
     <meta property="og:video" content="${media}">
     <meta property="og:video:type" content="video/mp4">
     <meta property="og:image" content="${origin}/media/${THUMBNAIL}">
@@ -107,6 +110,10 @@ export async function startFixtureServer(options: {
         server.close(() => resolve());
       }),
   };
+}
+
+function escapeHtml(text: string) {
+  return text.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
 const CONTENT_TYPES: Record<string, string> = {

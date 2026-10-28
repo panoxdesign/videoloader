@@ -62,6 +62,20 @@ export const texts = {
     cancelled: "Cancelled",
   } satisfies Record<EntryState, string>,
   processing: "Processing",
+  /** Fertig, aber die Mediendatei fehlt. Kein eigener Zustand. */
+  fileMissing: "File missing",
+  actions: {
+    download: "Download",
+    delete: "Delete",
+  },
+  deleteDialog: {
+    title: "Delete this file?",
+    /** Ohne Größe, wenn die Datei schon fehlt. */
+    description: (title: string, size?: string) =>
+      `“${title}”${size ? ` (${size})` : ""} will be removed from the server. This can't be undone.`,
+    cancel: "Cancel",
+    confirm: "Delete",
+  },
   errors: {
     other: "Download failed.",
   } as Record<string, string>,

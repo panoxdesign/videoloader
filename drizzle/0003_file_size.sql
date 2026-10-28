@@ -1,0 +1,1 @@
+ALTER TABLE `queue_entries` ADD `file_size` integer;

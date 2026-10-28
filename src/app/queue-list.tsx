@@ -1,12 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { cn } from "cn";
+import { DownloadIcon, Trash2Icon } from "lucide-react";
+import { useState, useTransition } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
   countByFilter,
   FILTERS,
+  formatSize,
   matchesFilter,
   progressFraction,
   queuePositions,
@@ -16,6 +30,7 @@ import {
 } from "@/lib/queue-view";
 import { texts } from "@/lib/texts";
 import { useHydrated } from "@/lib/use-hydrated";
+import { deleteEntry } from "./actions";
 
 export function QueueList({ entries }: { entries: EntryView[] }) {
   const [filter, setFilter] = useState<Filter>("all");
@@ -99,11 +114,22 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p className="font-semibold [overflow-wrap:anywhere]">{title}</p>
         <div className="flex flex-wrap items-center gap-2 text-xs leading-4 font-medium text-foreground-secondary sm:text-[13px] sm:leading-[18px]">
-          <Badge variant={BADGE_VARIANT[entry.state]}>
-            {entry.state === "running" && entry.phase === "postprocess" ? texts.processing : texts.states[entry.state]}
-          </Badge>
+          {entry.fileMissing ? (
+            <Badge variant="error">{texts.fileMissing}</Badge>
+          ) : (
+            <Badge variant={BADGE_VARIANT[entry.state]}>
+              {entry.state === "running" && entry.phase === "postprocess" ? texts.processing : texts.states[entry.state]}
+            </Badge>
+          )}
           {/* Fehlgeschlagene Einträge zeigen statt der Medienart die Kurzmeldung. */}
-          {entry.state !== "failed" && <MediaSummary entry={entry} />}
+          {entry.state !== "failed" && (
+            <span>
+              <MediaSummary entry={entry} />
+              {entry.state === "done" && !entry.fileMissing && entry.fileSize !== null && hydrated && (
+                <span className="tabular-nums"> · {formatSize(entry.fileSize)}</span>
+              )}
+            </span>
+          )}
           {position !== undefined && (
             <>
               <Dot />
@@ -127,7 +153,63 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
         </div>
         {fraction !== undefined && <Progress value={Math.round(fraction * 100)} aria-label={title} />}
       </div>
+      {entry.state === "done" && (
+        <div className="flex flex-none gap-2">
+          {!entry.fileMissing && (
+            // Den Dateinamen liefert `Content-Disposition`, deshalb `download` ohne Wert.
+            <a
+              href={`/api/files/${entry.id}`}
+              download
+              aria-label={texts.actions.download}
+              className={cn(buttonVariants({ variant: "outline" }), "max-sm:w-11 max-sm:px-0")}
+            >
+              <DownloadIcon aria-hidden />
+              <span className="max-sm:hidden">{texts.actions.download}</span>
+            </a>
+          )}
+          <DeleteButton entry={entry} title={title} />
+        </div>
+      )}
     </li>
+  );
+}
+
+/** „Delete“ mit Bestätigung. Löscht Mediendatei und Eintrag zusammen. */
+function DeleteButton({ entry, title }: { entry: EntryView; title: string }) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const size = !entry.fileMissing && entry.fileSize !== null ? formatSize(entry.fileSize) : undefined;
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger
+        render={<Button variant="ghost" aria-label={texts.actions.delete} className="max-sm:w-11 max-sm:px-0" />}
+      >
+        <Trash2Icon aria-hidden className="sm:hidden" />
+        <span className="max-sm:hidden">{texts.actions.delete}</span>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{texts.deleteDialog.title}</AlertDialogTitle>
+          <AlertDialogDescription>{texts.deleteDialog.description(title, size)}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{texts.deleteDialog.cancel}</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                await deleteEntry(entry.id);
+                setOpen(false);
+              })
+            }
+          >
+            {texts.deleteDialog.confirm}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
