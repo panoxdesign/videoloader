@@ -5,7 +5,7 @@ import { register } from "@/instrumentation";
 import { migrateDb, openDb } from "@/server/db/open";
 import { dataPaths } from "@/server/paths";
 import { enqueue, getEntry } from "@/server/queue";
-import { tempDataDir, waitFor } from "./helpers";
+import { tempDataDir, VIDEO, waitFor } from "./helpers";
 
 const fixtureUrl = inject("fixtureUrl");
 
@@ -25,8 +25,8 @@ describe("register", () => {
     // Gedrosselt auf etwa 4 s je Download. Ein zweiter Worker hätte nach einem Tick einen zweiten Slot.
     const db = openDb(dataPaths(dataDir).db);
     migrateDb(db);
-    const first = enqueue(db, `${fixtureUrl}/videos/clip-one?rate=100000`, 1);
-    const second = enqueue(db, `${fixtureUrl}/videos/clip-two?rate=100000`, 2);
+    const first = enqueue(db, `${fixtureUrl}/videos/clip-one?rate=100000`, VIDEO, 1);
+    const second = enqueue(db, `${fixtureUrl}/videos/clip-two?rate=100000`, VIDEO, 2);
 
     await waitFor(() => getEntry(db, first.id)?.state === "running");
     const seen = new Set<string>();

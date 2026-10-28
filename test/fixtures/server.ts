@@ -4,7 +4,7 @@ import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CLIP, ensureMedia, THUMBNAIL } from "./media.ts";
+import { CLIP, DASH_DIR, DASH_MANIFEST, ensureMedia, THUMBNAIL } from "./media.ts";
 
 /**
  * Einzelseiten mit `og:`-Tags. yt-dlp nimmt sie über den generic-Extractor.
@@ -53,6 +53,30 @@ export async function startFixtureServer(options: {
       return;
     }
 
+    // DASH als <video>-Quelle. yt-dlp nummeriert solche Quellen, ID und Titel
+    // lauten deshalb „clip-dash-1“ und „Clip Dash (1)“.
+    if (url.pathname === "/videos/clip-dash") {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.end(`<!doctype html>
+<html>
+  <head>
+    <title>Clip Dash</title>
+    <meta property="og:title" content="Clip Dash">
+  </head>
+  <body>
+    <video controls>
+      <source src="${origin}/${DASH_DIR}/${DASH_MANIFEST}" type="application/dash+xml">
+    </video>
+  </body>
+</html>`);
+      return;
+    }
+    const dash = url.pathname.match(/^\/dash\/([\w-]+\.(?:mpd|m4s))$/);
+    if (dash) {
+      void sendFile(res, join(mediaDir, DASH_DIR, dash[1]));
+      return;
+    }
+
     const media = url.pathname.match(/^\/media\/([\w-]+)\.mp4$/);
     if (media && PAGES[media[1]]) {
       const rate = Number(url.searchParams.get("rate")) || undefined;
@@ -83,10 +107,22 @@ export async function startFixtureServer(options: {
   };
 }
 
+const CONTENT_TYPES: Record<string, string> = {
+  mp4: "video/mp4",
+  jpg: "image/jpeg",
+  mpd: "application/dash+xml",
+  m4s: "video/iso.segment",
+};
+
 async function sendFile(res: ServerResponse, file: string, rate?: number) {
-  const { size } = await stat(file);
+  const size = await stat(file).then((s) => s.size, () => undefined);
+  if (size === undefined) {
+    res.statusCode = 404;
+    res.end("not found");
+    return;
+  }
   res.setHeader("content-length", size);
-  res.setHeader("content-type", file.endsWith(".mp4") ? "video/mp4" : "image/jpeg");
+  res.setHeader("content-type", CONTENT_TYPES[file.split(".").pop() ?? ""] ?? "application/octet-stream");
   if (!rate) {
     createReadStream(file).pipe(res);
     return;

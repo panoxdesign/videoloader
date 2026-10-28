@@ -10,6 +10,10 @@ const run = promisify(execFile);
 
 export const CLIP = "clip.mp4";
 export const THUMBNAIL = "clip.jpg";
+/** DASH mit getrenntem Video in drei Auflösungen und einer Audiospur. */
+export const DASH_DIR = "dash";
+export const DASH_MANIFEST = "manifest.mpd";
+export const DASH_HEIGHTS = [240, 480, 720] as const;
 
 /**
  * Erzeugt die Fixture-Medien mit ffmpeg. Der Cache-Schlüssel ist der Hash dieser
@@ -32,6 +36,17 @@ export async function ensureMedia(cacheRoot: string): Promise<string> {
   await ffmpeg(
     "-f", "lavfi", "-i", "testsrc2=size=640x360",
     "-frames:v", "1", join(work, THUMBNAIL),
+  );
+  await mkdir(join(work, DASH_DIR));
+  await ffmpeg(
+    "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=25:duration=4",
+    "-f", "lavfi", "-i", "sine=frequency=440:duration=4",
+    ...DASH_HEIGHTS.flatMap(() => ["-map", "0:v"]), "-map", "1:a",
+    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "25",
+    ...DASH_HEIGHTS.flatMap((height, i) => [`-filter:v:${i}`, `scale=-2:${height}`, `-b:v:${i}`, `${height}k`]),
+    "-c:a", "aac", "-b:a", "64k",
+    "-f", "dash", "-seg_duration", "1", "-adaptation_sets", "id=0,streams=v id=1,streams=a",
+    join(work, DASH_DIR, DASH_MANIFEST),
   );
   try {
     await rename(work, dir);

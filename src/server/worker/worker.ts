@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import { join, relative, isAbsolute } from "node:path";
 import { createInterface } from "node:readline";
+import { parseMedia } from "@/lib/media";
 import type { Db } from "../db/open";
 import { queueEntries, type QueueEntry } from "../db/schema";
 import type { Logger } from "../log";
@@ -93,8 +94,11 @@ async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry
     await mkdir(tmpDir, { recursive: true });
     await mkdir(paths.downloads, { recursive: true });
 
+    const media = parseMedia(entry);
+    if (!media) throw new Error(`invalid media type ${entry.mediaType} / ${entry.resolution}`);
     const args = buildDownloadArgs({
       url: entry.url,
+      media,
       downloadsDir: paths.downloads,
       tmpDir,
       cacheDir: paths.cache,

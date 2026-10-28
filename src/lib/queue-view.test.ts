@@ -14,6 +14,8 @@ function entry(id: number, state: EntryState, queuedAt: number, finishedAt: numb
     id,
     url: `https://example.com/${id}`,
     title: null,
+    mediaType: "video",
+    resolution: "best",
     state,
     phase: state === "running" ? "download" : null,
     queuedAt,

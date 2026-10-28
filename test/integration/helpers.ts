@@ -2,10 +2,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { onTestFinished } from "vitest";
+import type { Media } from "@/lib/media";
 import { migrateDb, openDb } from "@/server/db/open";
 import { dataPaths } from "@/server/paths";
 
 export const YTDLP = process.env.YTDLP_PATH ?? "/usr/local/bin/yt-dlp";
+
+export const VIDEO: Media = { mediaType: "video", resolution: "best" };
+export const AUDIO: Media = { mediaType: "audio", resolution: null };
 
 /** Datenordner und DB in einem Temp-Ordner, nach dem Test gelöscht. */
 export async function tempDataDir() {

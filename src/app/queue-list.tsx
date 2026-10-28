@@ -90,13 +90,23 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
           <Badge variant={BADGE_VARIANT[entry.state]}>
             {entry.state === "running" && entry.phase === "postprocess" ? texts.processing : texts.states[entry.state]}
           </Badge>
+          {/* Fehlgeschlagene Einträge zeigen statt der Medienart die Kurzmeldung. */}
+          {entry.state !== "failed" && <MediaSummary entry={entry} />}
           {position !== undefined && (
-            <span>
-              #{position}
-              <span className="max-sm:hidden"> {texts.queue.inQueue}</span>
-            </span>
+            <>
+              <Dot />
+              <span>
+                #{position}
+                <span className="max-sm:hidden"> {texts.queue.inQueue}</span>
+              </span>
+            </>
           )}
-          {fraction !== undefined && hydrated && <span className="tabular-nums">{formatPercent(fraction)}</span>}
+          {fraction !== undefined && hydrated && (
+            <>
+              <Dot />
+              <span className="tabular-nums">{formatPercent(fraction)}</span>
+            </>
+          )}
           {entry.state === "failed" && (
             <span className="text-error-foreground">
               {texts.errors[entry.errorCategory ?? "other"] ?? texts.errors.other}
@@ -107,6 +117,20 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
       </div>
     </li>
   );
+}
+
+/** „Video · 1080p“ bzw. „Audio · MP3“, mobil nur „1080p“ bzw. „MP3“. */
+function MediaSummary({ entry }: { entry: Pick<EntryView, "mediaType" | "resolution"> }) {
+  return (
+    <span>
+      <span className="max-sm:hidden">{texts.media.row[entry.mediaType]} · </span>
+      {entry.resolution ? texts.media.resolutions[entry.resolution] : texts.media.row.mp3}
+    </span>
+  );
+}
+
+function Dot() {
+  return <span aria-hidden>·</span>;
 }
 
 /** Im Locale des Browsers, z. B. „42%“ oder „42 %“. */

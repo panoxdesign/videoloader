@@ -1,15 +1,15 @@
+import type { Media } from "@/lib/media";
+
 export type DownloadArgsInput = {
   url: string;
+  media: Media;
   downloadsDir: string;
   tmpDir: string;
   cacheDir: string;
 };
 
-/**
- * Argumente für einen Download. Die Medienart ist vorerst fest MP4 bis 1080p.
- * `-S` muss hinter `-t mp4` stehen, sonst geht die Auflösungsgrenze verloren.
- */
-export function buildDownloadArgs({ url, downloadsDir, tmpDir, cacheDir }: DownloadArgsInput): string[] {
+/** Argumente für einen Download als MP4 mit Auflösungsgrenze oder als MP3. */
+export function buildDownloadArgs({ url, media, downloadsDir, tmpDir, cacheDir }: DownloadArgsInput): string[] {
   return [
     "--no-playlist",
     "--newline",
@@ -24,12 +24,24 @@ export function buildDownloadArgs({ url, downloadsDir, tmpDir, cacheDir }: Downl
     "--windows-filenames",
     "--trim-filenames", "180",
     "--cache-dir", cacheDir,
-    "-t", "mp4",
-    "-S", "res:1080",
+    ...mediaArgs(media),
     "-P", downloadsDir,
     "-P", `temp:${tmpDir}`,
     "-o", "%(title)s [%(id)s].%(ext)s",
     "--",
     url,
   ];
+}
+
+/**
+ * Ein späteres `-S` hat Vorrang vor dem aus `-t mp4`, muss also dahinter stehen.
+ * `channels:2` nimmt AAC Stereo statt AAC 5.1, ohne die Videoauswahl zu ändern
+ * (live geprüft an `aqz-KE-bpKQ`: 140 statt 258 bei allen vier Stufen).
+ */
+function mediaArgs(media: Media): string[] {
+  if (media.mediaType === "audio") {
+    return ["-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "192K", "--embed-metadata", "--embed-thumbnail"];
+  }
+  const res = media.resolution === "best" ? "res" : `res:${media.resolution}`;
+  return ["-t", "mp4", "-S", `${res},channels:2`];
 }

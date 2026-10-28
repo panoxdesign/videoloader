@@ -8,6 +8,7 @@ import { texts } from "@/lib/texts";
 import { getDb } from "@/server/db";
 import { listEntries } from "@/server/queue";
 import { addEntry } from "./actions";
+import { MediaOptions } from "./media-options";
 import { QueueList } from "./queue-list";
 import { RefreshEvery } from "./refresh-every";
 
@@ -40,7 +41,7 @@ export default function Home() {
             placeholder={texts.addForm.linkPlaceholder}
             className="sm:h-13"
           />
-          {/* Ticket 19: Medienart und Auflösung als zweite Zeile (sm:col-span-2 sm:row-start-2). */}
+          <MediaOptions className="sm:col-span-2 sm:row-start-2" />
           <Button type="submit" size="lg" className="sm:h-13">
             {texts.addForm.add}
           </Button>
@@ -63,6 +64,8 @@ async function Queue() {
     id: entry.id,
     url: entry.url,
     title: entry.title,
+    mediaType: entry.mediaType,
+    resolution: entry.resolution,
     state: entry.state,
     phase: entry.phase,
     queuedAt: entry.queuedAt,

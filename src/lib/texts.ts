@@ -1,4 +1,5 @@
 import type { EntryState } from "@/server/db/schema";
+import type { Resolution } from "./media";
 import type { Filter } from "./queue-view";
 import type { Theme } from "./theme";
 
@@ -17,6 +18,23 @@ export const texts = {
     linkLabel: "Link",
     linkPlaceholder: "Paste a link to a video or playlist",
     add: "Add",
+  },
+  media: {
+    label: "Media type",
+    video: "Video",
+    audio: "Audio (MP3)",
+    resolutionLabel: "Max resolution",
+    /** Steht im Auslöser vor der Stufe, z. B. „Max Best“. */
+    max: "Max",
+    resolutions: { best: "Best", "1080": "1080p", "720": "720p", "480": "480p" } satisfies Record<Resolution, string>,
+    /** Zweite Zeile im Auflösungsmenü. */
+    resolutionHints: { best: "Up to 4K – may not play on older devices", "1080": "Plays everywhere" } as Partial<
+      Record<Resolution, string>
+    >,
+    bestWarning: "Up to 4K – may not play on older devices. Choose 1080p for best compatibility.",
+    audioInfo: "192 kbps · with cover",
+    /** In der Listenzeile „Video · 1080p“ bzw. „Audio · MP3“, mobil ohne Medienart. */
+    row: { video: "Video", audio: "Audio", mp3: "MP3" },
   },
   queue: {
     title: "Queue",
