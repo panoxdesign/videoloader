@@ -1,14 +1,11 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import type { EntryView } from "@/lib/queue-view";
 import { texts } from "@/lib/texts";
 import { getDb } from "@/server/db";
 import { listEntries } from "@/server/queue";
-import { addEntry } from "./actions";
-import { MediaOptions } from "./media-options";
+import { AddForm } from "./add-form";
 import { QueueList } from "./queue-list";
 import { RefreshEvery } from "./refresh-every";
 
@@ -24,28 +21,7 @@ export default function Home() {
       </header>
 
       <main className="mx-auto flex w-full max-w-[1120px] flex-col gap-3 p-4 sm:gap-4 sm:p-6">
-        {/* Mobil dreizeilig (Link, Optionen, „Add“), breit zweizeilig mit „Add“ neben dem Link. */}
-        <form
-          action={addEntry}
-          aria-label={texts.addForm.title}
-          className="grid gap-2 rounded-lg border border-border bg-card p-3 shadow-elevation-1 sm:grid-cols-[1fr_auto] sm:gap-3 sm:p-4"
-        >
-          <label htmlFor="link" className="sr-only">
-            {texts.addForm.linkLabel}
-          </label>
-          <Input
-            id="link"
-            name="url"
-            type="url"
-            required
-            placeholder={texts.addForm.linkPlaceholder}
-            className="sm:h-13"
-          />
-          <MediaOptions className="sm:col-span-2 sm:row-start-2" />
-          <Button type="submit" size="lg" className="sm:h-13">
-            {texts.addForm.add}
-          </Button>
-        </form>
+        <AddForm />
 
         {/* Tickets 28 und 29: Banner für Pause und Rate-Limit */}
 
@@ -64,6 +40,7 @@ async function Queue() {
     id: entry.id,
     url: entry.url,
     title: entry.title,
+    thumbnailUrl: entry.thumbnailUrl,
     mediaType: entry.mediaType,
     resolution: entry.resolution,
     state: entry.state,

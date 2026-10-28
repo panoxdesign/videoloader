@@ -1,13 +1,14 @@
 import { asc, eq } from "drizzle-orm";
 import type { Media } from "@/lib/media";
+import type { CheckedMedia } from "./check/parse-check";
 import type { Db } from "./db/open";
 import { queueEntries } from "./db/schema";
 
-/** Legt einen wartenden Queue-Eintrag an. Die Link-Prüfung folgt in einem späteren Ticket. */
-export function enqueue(db: Db, url: string, media: Media, now: number) {
+/** Legt einen wartenden Queue-Eintrag an, mit dem, was die Link-Prüfung schon über das Medium weiß. */
+export function enqueue(db: Db, url: string, media: Media, now: number, checked?: CheckedMedia) {
   return db
     .insert(queueEntries)
-    .values({ url, ...media, state: "waiting", queuedAt: now })
+    .values({ url, ...checked, ...media, state: "waiting", queuedAt: now })
     .returning()
     .get();
 }

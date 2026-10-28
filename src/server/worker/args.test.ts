@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDownloadArgs } from "./args";
+import { buildCheckArgs, buildDownloadArgs } from "./args";
 
 const base = { url: "https://example.com/v", downloadsDir: "/data/downloads", tmpDir: "/data/tmp/1", cacheDir: "/data/cache" };
 
@@ -37,6 +37,26 @@ describe("buildDownloadArgs", () => {
 
   it("ends with the URL after --", () => {
     const args = buildDownloadArgs({ ...base, url: "-weird", media: { mediaType: "audio", resolution: null } });
+    expect(args.slice(-2)).toEqual(["--", "-weird"]);
+  });
+});
+
+describe("buildCheckArgs", () => {
+  const args = buildCheckArgs({ url: "-weird", cacheDir: "/data/cache" });
+
+  it("asks for one flat JSON object of the video, not the playlist", () => {
+    expect(args).toContain("-J");
+    expect(args).toContain("--flat-playlist");
+    expect(args).toContain("--no-playlist");
+  });
+
+  it("shares the cache with downloads but writes no files", () => {
+    expect(valuesOf(args, "--cache-dir")).toEqual(["/data/cache"]);
+    expect(args).not.toContain("-P");
+    expect(args).not.toContain("-o");
+  });
+
+  it("ends with the URL after --", () => {
     expect(args.slice(-2)).toEqual(["--", "-weird"]);
   });
 });

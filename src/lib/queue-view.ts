@@ -6,6 +6,7 @@ export type EntryView = Pick<
   | "id"
   | "url"
   | "title"
+  | "thumbnailUrl"
   | "mediaType"
   | "resolution"
   | "state"

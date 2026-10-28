@@ -13,7 +13,14 @@ export const queueEntries = sqliteTable(
   {
     id: integer().primaryKey({ autoIncrement: true }),
     url: text().notNull(),
+    // Quelle bis Dauer kommen aus der Prüfung bei „Add“. Je nach Quelle fehlen sie.
+    /** Quelle, der `extractor_key` von yt-dlp. */
+    source: text(),
+    mediaId: text(),
     title: text(),
+    thumbnailUrl: text(),
+    /** In Sekunden. */
+    duration: real(),
     mediaType: text({ enum: MEDIA_TYPES }).notNull(),
     resolution: text({ enum: RESOLUTIONS }),
     state: text({ enum: ENTRY_STATES }).notNull(),

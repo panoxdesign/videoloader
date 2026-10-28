@@ -23,7 +23,7 @@ export function buildDownloadArgs({ url, media, downloadsDir, tmpDir, cacheDir }
     "after_move:DONE %(.{filepath,id,title,ext,extractor_key,format_id})j",
     "--windows-filenames",
     "--trim-filenames", "180",
-    "--cache-dir", cacheDir,
+    ...commonArgs(cacheDir),
     ...mediaArgs(media),
     "-P", downloadsDir,
     "-P", `temp:${tmpDir}`,
@@ -31,6 +31,18 @@ export function buildDownloadArgs({ url, media, downloadsDir, tmpDir, cacheDir }
     "--",
     url,
   ];
+}
+
+export type CheckArgsInput = { url: string; cacheDir: string };
+
+/** Argumente für die Prüfung bei „Add“: ein JSON-Objekt, bei Playlists mit Flat-Einträgen. */
+export function buildCheckArgs({ url, cacheDir }: CheckArgsInput): string[] {
+  return ["-J", "--flat-playlist", "--no-playlist", ...commonArgs(cacheDir), "--", url];
+}
+
+/** Gleich in Prüfung, Vorschau und Download. */
+function commonArgs(cacheDir: string): string[] {
+  return ["--cache-dir", cacheDir];
 }
 
 /**

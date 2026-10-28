@@ -18,6 +18,10 @@ export const texts = {
     linkLabel: "Link",
     linkPlaceholder: "Paste a link to a video or playlist",
     add: "Add",
+    checking: "Checking…",
+    noMedia: "No downloadable media found at this link.",
+    // Vorläufig, bis Ticket 26 den Playlist-Dialog bringt.
+    playlistNotYet: "This link is a playlist. Playlists can't be added yet – paste a link to a single video.",
   },
   media: {
     label: "Media type",

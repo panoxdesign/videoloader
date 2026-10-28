@@ -82,8 +82,20 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
 
   return (
     <li className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 sm:gap-4 sm:px-5 sm:py-3.5">
-      {/* Vorschaubilder kommen mit der Link-Prüfung, bis dahin der schraffierte Platzhalter. */}
-      <div aria-hidden className="h-[54px] w-24 flex-none rounded-sm bg-muted bg-hatch max-sm:hidden" />
+      {/* Der schraffierte Platzhalter steht da, bis das Bild geladen ist, und ohne Bild. */}
+      <div aria-hidden className="h-[54px] w-24 flex-none overflow-hidden rounded-sm bg-muted bg-hatch max-sm:hidden">
+        {entry.thumbnailUrl && (
+          // Direkt von der Quelle, ohne Next-Bildoptimierung (abgeschaltet, kein sharp im Image).
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={entry.thumbnailUrl}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className="size-full object-cover"
+          />
+        )}
+      </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p className="font-semibold [overflow-wrap:anywhere]">{title}</p>
         <div className="flex flex-wrap items-center gap-2 text-xs leading-4 font-medium text-foreground-secondary sm:text-[13px] sm:leading-[18px]">

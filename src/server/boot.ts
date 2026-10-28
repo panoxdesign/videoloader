@@ -2,10 +2,8 @@ import { describeConfig, formatProblems, isTimeZone, parseConfig } from "./confi
 import { gatherFacts } from "./config/facts";
 import { migrateDb, openDb } from "./db/open";
 import { createLogger } from "./log";
-import { createDataDirs, dataPaths } from "./paths";
+import { BUNDLED_YTDLP, createDataDirs, dataPaths } from "./paths";
 import { PRODUCTION_TIMING, startWorker, systemClock, type Worker } from "./worker/worker";
-
-export const BUNDLED_YTDLP = "/usr/local/bin/yt-dlp";
 
 // Nur Start-Guard, kein Signalweg: Web-App und Worker reden ausschließlich über die DB.
 const WORKER_KEY = Symbol.for("videoloader.worker");

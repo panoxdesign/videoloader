@@ -14,6 +14,8 @@ import { CLIP, DASH_DIR, DASH_MANIFEST, ensureMedia, THUMBNAIL } from "./media.t
 const PAGES: Record<string, { title: string }> = {
   "clip-one": { title: "Clip One" },
   "clip-two": { title: "Clip Two" },
+  "clip-three": { title: "Clip Three" },
+  "clip-four": { title: "Clip Four" },
 };
 
 export type FixtureServer = { url: string; close(): Promise<void> };

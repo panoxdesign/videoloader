@@ -2,6 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { resolveDataDir } from "./config/config";
 
+export const BUNDLED_YTDLP = "/usr/local/bin/yt-dlp";
+
 /** Für Request-Kontexte. Geprüft hat `register` den Wert schon beim Start. */
 export function dataDirFromEnv() {
   return resolveDataDir(process.env);

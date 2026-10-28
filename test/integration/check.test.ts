@@ -1,0 +1,41 @@
+import { describe, expect, inject, it } from "vitest";
+import { checkLink } from "@/server/check/check";
+import { dataPaths } from "@/server/paths";
+import { tempDataDir, YTDLP } from "./helpers";
+
+const fixtureUrl = inject("fixtureUrl");
+
+async function check(url: string, signal = AbortSignal.timeout(30_000)) {
+  const { cache } = dataPaths(await tempDataDir());
+  return checkLink({ ytDlpPath: YTDLP, url, cacheDir: cache, signal });
+}
+
+describe("link check", () => {
+  it("knows source, media id, title and thumbnail of a single page before the download", async () => {
+    expect(await check(`${fixtureUrl}/videos/clip-one`)).toEqual({
+      kind: "video",
+      media: {
+        source: "Generic",
+        mediaId: "clip-one",
+        title: "Clip One",
+        thumbnailUrl: `${fixtureUrl}/media/clip.jpg`,
+        duration: null,
+      },
+    });
+  });
+
+  it.each([
+    ["a 404 page", `${fixtureUrl}/videos/missing`, /HTTP Error 404/],
+    ["something that is not a link", "notaurl", /is not a valid URL/],
+  ])("finds nothing at %s and keeps the error line", async (_, url, error) => {
+    const result = await check(url);
+    expect(result).toMatchObject({ kind: "none" });
+    expect(result.kind === "none" && result.error).toMatch(error);
+  });
+
+  it("gives up when the signal fires", async () => {
+    const started = Date.now();
+    expect(await check(`${fixtureUrl}/videos/clip-one`, AbortSignal.timeout(50))).toEqual({ kind: "none", timedOut: true });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+});

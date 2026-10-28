@@ -28,6 +28,8 @@ describe("migrations", () => {
     migrateDb(db);
 
     expect(getEntry(db, 1)).toMatchObject({ title: "Old", state: "done", mediaType: "video", resolution: "1080" });
+    // Die Prüfung gab es damals noch nicht.
+    expect(getEntry(db, 1)).toMatchObject({ source: null, mediaId: null, thumbnailUrl: null, duration: null });
   });
 
   it("rejects audio with a resolution and video without one", async () => {
