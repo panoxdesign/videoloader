@@ -62,6 +62,14 @@ test("a duplicate warns inline, and Add anyway gives the second entry its own fi
   await expect(target).toContainText("Video · Best");
   await expect(target).toBeInViewport();
 
+  // Ein zweiter Klick mit demselben Anker löst kein `hashchange` aus und muss trotzdem wirken.
+  await filters.getByRole("button", { name: /^Active/ }).click();
+  await expect(videoRows).toHaveCount(0);
+  await warning.getByRole("link", { name: "Show existing" }).click();
+  await expect(filters.getByRole("button", { name: /^All/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(target).toContainText("Dup Clip");
+  await expect(target).toBeInViewport();
+
   await warning.getByRole("button", { name: "Cancel" }).click();
   await expect(warning).toBeHidden();
   await expect(link).toHaveValue("");

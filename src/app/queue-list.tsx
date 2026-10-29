@@ -40,17 +40,17 @@ export function QueueList({ entries }: { entries: EntryView[] }) {
   const visible = sortForList(entries).filter((entry) => matchesFilter(entry.state, filter));
 
   // „Show existing“ springt per `#entry-<id>` zur Zeile. Blendet der Filter sie aus, gilt wieder „All“.
+  // Am Klick statt an `hashchange`, denn steht der Hash schon da, kommt kein `hashchange`. Der Klick
+  // läuft vor dem Sprung, die Zeile steht also im DOM, wenn der Browser scrollt und `:target` setzt.
   useEffect(() => {
-    const reveal = () => {
-      const id = Number(/^#entry-(\d+)$/.exec(location.hash)?.[1]);
+    const reveal = (event: MouseEvent) => {
+      const href = (event.target as Element | null)?.closest("a")?.getAttribute("href") ?? "";
+      const id = Number(/^#entry-(\d+)$/.exec(href)?.[1]);
       const target = entries.find((entry) => entry.id === id);
-      if (!target || matchesFilter(target.state, filter)) return;
-      flushSync(() => setFilter("all"));
-      // Erst jetzt steht die Zeile im DOM. Derselbe Sprung noch einmal setzt `:target` und scrollt.
-      location.replace(`#${entryAnchor(id)}`);
+      if (target && !matchesFilter(target.state, filter)) flushSync(() => setFilter("all"));
     };
-    window.addEventListener("hashchange", reveal);
-    return () => window.removeEventListener("hashchange", reveal);
+    document.addEventListener("click", reveal);
+    return () => document.removeEventListener("click", reveal);
   }, [entries, filter]);
 
   return (

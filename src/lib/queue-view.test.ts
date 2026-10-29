@@ -134,10 +134,6 @@ describe("formatAge", () => {
     [45 * DAY, "last month"],
     [400 * DAY, "last year"],
   ])("formats an age of %i ms as %s", (ms, text) => {
-    expect(formatAge(ms, "en")).toBe(text);
-  });
-
-  it("follows the locale", () => {
-    expect(formatAge(2 * DAY, "de")).toBe("vorgestern");
+    expect(formatAge(ms)).toBe(text);
   });
 });

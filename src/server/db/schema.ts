@@ -6,6 +6,9 @@ import { MEDIA_TYPES, RESOLUTIONS } from "../../lib/media";
 export const ENTRY_STATES = ["waiting", "running", "done", "failed", "cancelled"] as const;
 export type EntryState = (typeof ENTRY_STATES)[number];
 
+/** Laufende und fertige Einträge halten ihren Dateinamen, auch wenn die Datei fehlt. */
+export const NAME_HOLDING_STATES = ["running", "done"] as const satisfies readonly EntryState[];
+
 export const PHASES = ["download", "postprocess"] as const;
 
 export const queueEntries = sqliteTable(
@@ -67,7 +70,7 @@ export const queueEntries = sqliteTable(
     // Sicherheitsnetz: Den Namen wählt der Worker schon so, dass er frei ist.
     uniqueIndex("queue_entries_file_name_idx")
       .on(t.fileName)
-      .where(sql`${t.state} in ('running', 'done')`),
+      .where(sql`${t.state} in (${sql.raw(NAME_HOLDING_STATES.map((s) => `'${s}'`).join(", "))})`),
   ],
 );
 

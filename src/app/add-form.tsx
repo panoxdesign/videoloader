@@ -98,7 +98,7 @@ function DuplicateAlert({
   }`;
   const sentence =
     kind === "downloaded"
-      ? texts.duplicate.exists(title, media, formatAge(ageMs ?? 0, texts.language))
+      ? texts.duplicate.exists(title, media, formatAge(ageMs ?? 0))
       : duplicate.state === "running" || position === undefined
         ? texts.duplicate.running(title, media)
         : texts.duplicate.waiting(title, media, position);

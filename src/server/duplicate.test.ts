@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { ENTRY_STATES } from "./db/schema";
 import { duplicateKey, findDuplicate, type DuplicateCandidate } from "./duplicate";
 
 const media = { source: "Youtube", mediaId: "abc", mediaType: "video" } as const;
@@ -28,7 +27,6 @@ describe("findDuplicate", () => {
     ["failed", false, undefined],
     ["cancelled", false, undefined],
   ] as const)("a %s entry (file there: %s) counts as %s", (state, fileExists, kind) => {
-    expect(ENTRY_STATES).toContain(state);
     const existing = entry({ state, fileExists, finishedAt: state === "done" ? 200 : null });
     expect(findDuplicate(media, [existing])).toEqual(kind && { kind, entry: existing });
   });

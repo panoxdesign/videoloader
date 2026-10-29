@@ -6,7 +6,7 @@ import { texts } from "@/lib/texts";
 import { CHECK_TIMEOUT_MS, checkLink } from "@/server/check/check";
 import { getDb } from "@/server/db";
 import type { EntryState } from "@/server/db/schema";
-import { duplicateKey } from "@/server/duplicate";
+import { duplicateKey, type Duplicate } from "@/server/duplicate";
 import { deleteDoneEntry } from "@/server/files/media-file";
 import { BUNDLED_YTDLP, dataDirFromEnv, dataPaths } from "@/server/paths";
 import { enqueue, findDuplicateEntry, queuePosition } from "@/server/queue";
@@ -15,7 +15,7 @@ import { enqueue, findDuplicateEntry, queuePosition } from "@/server/queue";
 export type DuplicateWarning = {
   /** Geht mit „Add anyway“ zurück und bestätigt genau dieses Medium in dieser Medienart. */
   key: string;
-  kind: "downloaded" | "queued";
+  kind: Duplicate["kind"];
   entryId: number;
   state: EntryState;
   title: string;

@@ -6,7 +6,7 @@ import { join, relative } from "node:path";
 import { createInterface } from "node:readline";
 import { parseMedia } from "@/lib/media";
 import type { Db } from "../db/open";
-import { queueEntries, type QueueEntry } from "../db/schema";
+import { NAME_HOLDING_STATES, queueEntries, type QueueEntry } from "../db/schema";
 import { chooseFileName, extensionOf, nameKey } from "../files/file-name";
 import { isInside } from "../files/inside";
 import type { Logger } from "../log";
@@ -100,7 +100,7 @@ function reserveFileName(tx: Tx, downloadsDir: string, entry: QueueEntry) {
   const others = tx
     .select({ fileName: queueEntries.fileName, filePath: queueEntries.filePath })
     .from(queueEntries)
-    .where(and(inArray(queueEntries.state, ["running", "done"]), ne(queueEntries.id, entry.id)))
+    .where(and(inArray(queueEntries.state, [...NAME_HOLDING_STATES]), ne(queueEntries.id, entry.id)))
     .all();
   const reserved = new Set(
     others.flatMap(({ fileName, filePath }) => [

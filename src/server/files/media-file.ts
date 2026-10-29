@@ -4,7 +4,6 @@ import { basename } from "node:path";
 import { Readable } from "node:stream";
 import type { Db } from "../db/open";
 import { queueEntries, type QueueEntry } from "../db/schema";
-import { getEntry } from "../queue";
 import { contentDisposition, contentTypeOf, parseRange } from "./http";
 import { isInside } from "./inside";
 
@@ -70,7 +69,8 @@ export async function serveMediaFile(downloadsDir: string, entry: MediaEntry | u
  * bleibt sie unberührt und nur der Eintrag geht. `false`, wenn es keinen fertigen Eintrag gibt.
  */
 export async function deleteDoneEntry(db: Db, downloadsDir: string, id: number) {
-  const entry = getEntry(db, id);
+  // Direkt statt über `getEntry`: `queue.ts` importiert diese Datei, ein Import zurück wäre ein Kreis.
+  const entry = db.select().from(queueEntries).where(eq(queueEntries.id, id)).get();
   if (entry?.state !== "done") return false;
   const file = await findMediaFile(downloadsDir, entry);
   if (file) await rm(file, { force: true });

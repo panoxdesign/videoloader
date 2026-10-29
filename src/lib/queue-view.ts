@@ -108,10 +108,10 @@ const AGE_UNITS = [
  * Wie lange etwas her ist, z. B. „5 minutes ago“, „yesterday“, „2 days ago“. Mit der Sprache
  * der UI-Texte, nicht der des Browsers, denn die Wörter stehen mitten in einem Satz.
  */
-export function formatAge(ms: number, language: string) {
-  const format = new Intl.RelativeTimeFormat(language, { numeric: "auto" });
+export function formatAge(ms: number) {
+  const format = new Intl.RelativeTimeFormat(texts.language, { numeric: "auto" });
   for (const [unit, size] of AGE_UNITS) {
     if (ms >= size) return format.format(-Math.floor(ms / size), unit);
   }
-  return texts.justNow;
+  return texts.time.justNow;
 }

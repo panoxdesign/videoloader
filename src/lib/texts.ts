@@ -89,7 +89,9 @@ export const texts = {
     cancel: "Cancel",
     showExisting: "Show existing",
   },
-  justNow: "just now",
+  time: {
+    justNow: "just now",
+  },
   errors: {
     other: "Download failed.",
   } as Record<string, string>,
