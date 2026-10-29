@@ -178,6 +178,10 @@ async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry
       child.on("close", (code) => resolve(code));
     });
   } finally {
+    // Erst aufräumen, dann den Zustand schreiben: Wer „fertig“ sieht, findet keine Reste mehr.
+    await rm(tmpDir, { recursive: true, force: true }).catch((error) =>
+      log.warn(`queue entry ${entry.id}: could not remove ${tmpDir}: ${error}`),
+    );
     if (exitCode === 0 && done && isInside(paths.downloads, done.filepath)) {
       update({
         state: "done",
@@ -191,7 +195,6 @@ async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry
       // Die Fehlerklassifikation folgt in einem späteren Ticket.
       update({ state: "failed", errorCategory: "other", finishedAt: clock.now(), pgid: null });
     }
-    await rm(tmpDir, { recursive: true, force: true });
   }
 }
 
