@@ -42,14 +42,19 @@ export function startWorker(deps: WorkerDeps): Worker {
 
   const tick = () => {
     if (stopped) return;
-    while (running.size < SLOTS) {
-      const entry = claimNext(deps.db, dataPaths(deps.dataDir).downloads);
-      if (!entry) break;
-      // Ein Fehler im Slot darf den Next-Prozess nicht als unhandled rejection beenden.
-      const slot = runSlot(deps, entry)
-        .catch((error) => deps.log.error(`queue entry ${entry.id}: slot failed: ${error?.stack ?? error}`))
-        .finally(() => running.delete(slot));
-      running.add(slot);
+    try {
+      while (running.size < SLOTS) {
+        const entry = claimNext(deps);
+        if (!entry) break;
+        // Ein Fehler im Slot darf den Next-Prozess nicht als unhandled rejection beenden.
+        const slot = runSlot(deps, entry)
+          .catch((error) => deps.log.error(`queue entry ${entry.id}: slot failed: ${errorText(error)}`))
+          .finally(() => running.delete(slot));
+        running.add(slot);
+      }
+    } catch (error) {
+      // Sonst plant sich der Worker nicht neu ein und die Queue steht still.
+      deps.log.error(`claiming the next queue entry failed: ${errorText(error)}`);
     }
     timer = setTimeout(tick, deps.timing.tickMs);
     timer.unref();
@@ -69,24 +74,36 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /**
  * Setzt den ältesten wartenden Eintrag in einer Transaktion auf läuft und reserviert dabei
- * seinen Dateinamen. So bekommen auch mehrere Slots nie denselben Namen.
+ * seinen Dateinamen. So bekommen auch mehrere Slots nie denselben Namen. Scheitert die
+ * Reservierung, schlägt nur dieser Eintrag fehl und der nächste wartende kommt dran.
  */
-function claimNext(db: Db, downloadsDir: string): QueueEntry | undefined {
+function claimNext({ db, dataDir, clock, log }: WorkerDeps): QueueEntry | undefined {
+  const downloadsDir = dataPaths(dataDir).downloads;
   return db.transaction((tx) => {
-    const next = tx
-      .select()
-      .from(queueEntries)
-      .where(eq(queueEntries.state, "waiting"))
-      .orderBy(asc(queueEntries.queuedAt), asc(queueEntries.id))
-      .limit(1)
-      .get();
-    if (!next) return undefined;
-    return tx
-      .update(queueEntries)
-      .set({ state: "running", phase: "download", fileName: reserveFileName(tx, downloadsDir, next) })
-      .where(and(eq(queueEntries.id, next.id), eq(queueEntries.state, "waiting")))
-      .returning()
-      .get();
+    for (;;) {
+      const next = tx
+        .select()
+        .from(queueEntries)
+        .where(eq(queueEntries.state, "waiting"))
+        .orderBy(asc(queueEntries.queuedAt), asc(queueEntries.id))
+        .limit(1)
+        .get();
+      if (!next) return undefined;
+      try {
+        return tx
+          .update(queueEntries)
+          .set({ state: "running", phase: "download", fileName: reserveFileName(tx, downloadsDir, next) })
+          .where(and(eq(queueEntries.id, next.id), eq(queueEntries.state, "waiting")))
+          .returning()
+          .get();
+      } catch (error) {
+        log.error(`queue entry ${next.id}: could not reserve a file name: ${errorText(error)}`);
+        tx.update(queueEntries)
+          .set({ state: "failed", errorCategory: "other", finishedAt: clock.now() })
+          .where(eq(queueEntries.id, next.id))
+          .run();
+      }
+    }
   });
 }
 
@@ -196,6 +213,10 @@ async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry
       update({ state: "failed", errorCategory: "other", finishedAt: clock.now(), pgid: null });
     }
   }
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error ? (error.stack ?? error.message) : String(error);
 }
 
 /** Für die Debug-Zeile: der Aufruf lässt sich so in eine Shell kopieren. */

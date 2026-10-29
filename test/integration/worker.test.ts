@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, inject, it, onTestFinished } from "vitest";
@@ -135,6 +135,19 @@ describe("worker", () => {
     worker.db.update(queueEntries).set({ fileName: "Kept [clip-one].mp4" }).where(eq(queueEntries.id, id)).run();
 
     expect(await worker.finished(id)).toMatchObject({ state: "done", fileName, filePath: join(worker.paths.downloads, fileName) });
+  });
+
+  it("fails only the entry whose file name cannot be reserved and keeps taking the next ones", async () => {
+    const worker = await startTestWorker();
+    // Ist `downloads/` eine Datei, wirft schon die Reservierung im Claim (ENOTDIR).
+    await writeFile(worker.paths.downloads, "not a directory");
+
+    const url = `${fixtureUrl}/videos/clip-one`;
+    expect(await worker.finished(await worker.add(url, VIDEO))).toMatchObject({ state: "failed", errorCategory: "other" });
+    expect(worker.lines.find((line) => line.includes(" ERROR "))).toContain("could not reserve a file name");
+
+    await rm(worker.paths.downloads);
+    expect(await worker.finished(await worker.add(url, VIDEO))).toMatchObject({ state: "done", fileName: "Clip One [clip-one].mp4" });
   });
 
   it.each([
