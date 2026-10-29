@@ -209,6 +209,18 @@ async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry
         pgid: null,
       });
     } else {
+      // Ein fehlgeschlagener Eintrag gibt seinen Namen frei. Hat yt-dlp die Datei schon
+      // verschoben, gehörte sie sonst keinem Eintrag, und ein Retry wiche auf ` (2)` aus.
+      // Seit dem Claim hält nur dieser Eintrag den Namen, die Datei ist also seine.
+      const leftovers = new Set([
+        ...(entry.fileName ? [join(paths.downloads, entry.fileName)] : []),
+        ...(done && isInside(paths.downloads, done.filepath) ? [done.filepath] : []),
+      ]);
+      for (const file of leftovers) {
+        await rm(file, { force: true }).catch((error) =>
+          log.warn(`queue entry ${entry.id}: could not remove ${file}: ${error}`),
+        );
+      }
       // Die Fehlerklassifikation folgt in einem späteren Ticket.
       update({ state: "failed", errorCategory: "other", finishedAt: clock.now(), pgid: null });
     }

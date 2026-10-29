@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, inject, it, onTestFinished } from "vitest";
@@ -12,20 +12,36 @@ import { dataPaths } from "@/server/paths";
 import { enqueue, getEntry } from "@/server/queue";
 import { startWorker } from "@/server/worker/worker";
 import { createLogger } from "@/server/log";
-import { AUDIO, tempDb, VIDEO, waitFor, YTDLP } from "./helpers";
+import { AUDIO, tempDataDir, tempDb, VIDEO, waitFor, YTDLP } from "./helpers";
 
 const fixtureUrl = inject("fixtureUrl");
 const run = promisify(execFile);
 
-/** Ein Worker auf einem frischen Datenordner. `add` prüft den Link wie „Add“ und reiht ihn dann ein. */
-async function startTestWorker() {
+/** Fake-yt-dlp: legt die fertige Datei unter dem `-o`-Namen in den ersten `-P`-Ordner und endet mit 1. */
+const MOVE_THEN_FAIL = `#!/bin/sh
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -P) case "$2" in temp:*) ;; *) dir="$2" ;; esac; shift ;;
+    -o) out="$2"; shift ;;
+  esac
+  shift
+done
+printf media > "$dir/$(printf '%s' "$out" | sed 's/%(ext)s$/mp4/; s/%%/%/g')"
+exit 1
+`;
+
+/**
+ * Ein Worker auf einem frischen Datenordner. `add` prüft den Link wie „Add“ (immer mit dem
+ * echten yt-dlp) und reiht ihn dann ein. `ytDlpPath` gilt nur für den Download.
+ */
+async function startTestWorker({ ytDlpPath = YTDLP } = {}) {
   const { dataDir, db } = await tempDb();
   const paths = dataPaths(dataDir);
   const lines: string[] = [];
   const log = createLogger({ level: "debug", timeZone: "UTC", write: (line) => lines.push(line) });
   const worker = startWorker({
     db,
-    ytDlpPath: YTDLP,
+    ytDlpPath,
     dataDir,
     timing: { tickMs: 50 },
     clock: { now: () => Date.now() },
@@ -148,6 +164,24 @@ describe("worker", () => {
 
     await rm(worker.paths.downloads);
     expect(await worker.finished(await worker.add(url, VIDEO))).toMatchObject({ state: "done", fileName: "Clip One [clip-one].mp4" });
+  });
+
+  it("removes the media file of a run that fails after yt-dlp has moved it, so a retry keeps the name", async () => {
+    // Wie yt-dlp, wenn nach dem Verschieben noch etwas scheitert: Die Datei liegt schon unter
+    // `downloads/`, der Exit-Code ist trotzdem 1.
+    const fake = join(await tempDataDir(), "yt-dlp");
+    await writeFile(fake, MOVE_THEN_FAIL, { mode: 0o755 });
+    const worker = await startTestWorker({ ytDlpPath: fake });
+
+    const entry = await worker.finished(await worker.add(`${fixtureUrl}/videos/clip-one`, VIDEO));
+
+    expect(entry).toMatchObject({ state: "failed", fileName: "Clip One [clip-one].mp4", filePath: null });
+    expect(await readdir(worker.paths.downloads)).toEqual([]);
+
+    // Wie nach einem Retry: wieder wartend. Der Name ist frei, also bleibt er.
+    worker.db.update(queueEntries).set({ state: "waiting", finishedAt: null }).where(eq(queueEntries.id, entry.id)).run();
+    expect(await worker.finished(entry.id)).toMatchObject({ state: "failed", fileName: "Clip One [clip-one].mp4" });
+    expect(await readdir(worker.paths.downloads)).toEqual([]);
   });
 
   it.each([
