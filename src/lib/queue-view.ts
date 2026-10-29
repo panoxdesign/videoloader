@@ -1,4 +1,5 @@
 import type { EntryState, QueueEntry } from "@/server/db/schema";
+import { texts } from "./texts";
 
 /** Was die Liste im Browser von einem Queue-Eintrag braucht. Zeitstempel formatiert der Browser. */
 export type EntryView = Pick<
@@ -93,4 +94,24 @@ export function formatSize(bytes: number, locale?: string) {
     unit: SIZE_UNITS[unit],
     maximumFractionDigits: unit > 0 && value < 10 ? 1 : 0,
   }).format(value);
+}
+
+const AGE_UNITS = [
+  ["year", 365 * 24 * 3_600_000],
+  ["month", 30 * 24 * 3_600_000],
+  ["day", 24 * 3_600_000],
+  ["hour", 3_600_000],
+  ["minute", 60_000],
+] as const;
+
+/**
+ * Wie lange etwas her ist, z. B. „5 minutes ago“, „yesterday“, „2 days ago“. Mit der Sprache
+ * der UI-Texte, nicht der des Browsers, denn die Wörter stehen mitten in einem Satz.
+ */
+export function formatAge(ms: number, language: string) {
+  const format = new Intl.RelativeTimeFormat(language, { numeric: "auto" });
+  for (const [unit, size] of AGE_UNITS) {
+    if (ms >= size) return format.format(-Math.floor(ms / size), unit);
+  }
+  return texts.justNow;
 }

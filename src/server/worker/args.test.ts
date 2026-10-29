@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { buildCheckArgs, buildDownloadArgs } from "./args";
 
-const base = { url: "https://example.com/v", downloadsDir: "/data/downloads", tmpDir: "/data/tmp/1", cacheDir: "/data/cache" };
+const base = {
+  url: "https://example.com/v",
+  fileName: "Clip One [clip-one].mp4",
+  downloadsDir: "/data/downloads",
+  tmpDir: "/data/tmp/1",
+  cacheDir: "/data/cache",
+};
 
 /** Die Werte direkt hinter einem Flag, in Reihenfolge. */
 function valuesOf(args: string[], flag: string) {
@@ -39,6 +45,14 @@ describe("buildDownloadArgs", () => {
     const args = buildDownloadArgs({ ...base, url: "-weird", media: { mediaType: "audio", resolution: null } });
     expect(args.slice(-2)).toEqual(["--", "-weird"]);
   });
+
+  it("writes to the reserved name literally, with % masked, and leaves only the extension to yt-dlp", () => {
+    const args = buildDownloadArgs({ ...base, fileName: "50% off [p] (2).mp4", media: { mediaType: "video", resolution: "best" } });
+    expect(valuesOf(args, "-o")).toEqual(["50%% off [p] (2).%(ext)s"]);
+    expect(valuesOf(args, "-P")).toEqual(["/data/downloads", "temp:/data/tmp/1"]);
+    // Die App kürzt den Namen selbst. Ein Kürzen durch yt-dlp könnte den Suffix abschneiden.
+    expect(args).not.toContain("--trim-filenames");
+  });
 });
 
 describe("buildCheckArgs", () => {
@@ -48,6 +62,11 @@ describe("buildCheckArgs", () => {
     expect(args).toContain("-J");
     expect(args).toContain("--flat-playlist");
     expect(args).toContain("--no-playlist");
+  });
+
+  it("prints media id and title cleaned for file names before the JSON", () => {
+    expect(valuesOf(args, "--print")).toEqual(["FILE\t%(id)S\t%(title)S"]);
+    expect(args).toContain("--windows-filenames");
   });
 
   it("shares the cache with downloads but writes no files", () => {

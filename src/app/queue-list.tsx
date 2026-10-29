@@ -2,7 +2,8 @@
 
 import { cn } from "cn";
 import { DownloadIcon, Trash2Icon } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { flushSync } from "react-dom";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +39,20 @@ export function QueueList({ entries }: { entries: EntryView[] }) {
   const positions = queuePositions(entries);
   const visible = sortForList(entries).filter((entry) => matchesFilter(entry.state, filter));
 
+  // „Show existing“ springt per `#entry-<id>` zur Zeile. Blendet der Filter sie aus, gilt wieder „All“.
+  useEffect(() => {
+    const reveal = () => {
+      const id = Number(/^#entry-(\d+)$/.exec(location.hash)?.[1]);
+      const target = entries.find((entry) => entry.id === id);
+      if (!target || matchesFilter(target.state, filter)) return;
+      flushSync(() => setFilter("all"));
+      // Erst jetzt steht die Zeile im DOM. Derselbe Sprung noch einmal setzt `:target` und scrollt.
+      location.replace(`#${entryAnchor(id)}`);
+    };
+    window.addEventListener("hashchange", reveal);
+    return () => window.removeEventListener("hashchange", reveal);
+  }, [entries, filter]);
+
   return (
     <section aria-label={texts.queue.title} className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -71,7 +86,7 @@ export function QueueList({ entries }: { entries: EntryView[] }) {
           {entries.length === 0 ? texts.queue.empty : texts.queue.emptyFilter}
         </p>
       ) : (
-        <ul className="rounded-lg border border-border bg-card py-1">
+        <ul className="overflow-hidden rounded-lg border border-border bg-card py-1">
           {visible.map((entry) => (
             <QueueRow key={entry.id} entry={entry} position={positions.get(entry.id)} />
           ))}
@@ -96,7 +111,10 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
     entry.state === "running" && entry.phase !== "postprocess" ? progressFraction(entry) : undefined;
 
   return (
-    <li className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 sm:gap-4 sm:px-5 sm:py-3.5">
+    <li
+      id={entryAnchor(entry.id)}
+      className="flex scroll-mt-4 items-center gap-3 border-b border-border px-4 py-3 last:border-b-0 target:animate-highlight sm:gap-4 sm:px-5 sm:py-3.5"
+    >
       {/* Der schraffierte Platzhalter steht da, bis das Bild geladen ist, und ohne Bild. */}
       <div aria-hidden className="h-[54px] w-24 flex-none overflow-hidden rounded-sm bg-muted bg-hatch max-sm:hidden">
         {entry.thumbnailUrl && (
@@ -221,6 +239,11 @@ function MediaSummary({ entry }: { entry: Pick<EntryView, "mediaType" | "resolut
       {entry.resolution ? texts.media.resolutions[entry.resolution] : texts.media.row.mp3}
     </span>
   );
+}
+
+/** Sprungziel einer Zeile, auch für „Show existing“ im Formular. */
+function entryAnchor(id: number) {
+  return `entry-${id}`;
 }
 
 function Dot() {

@@ -5,6 +5,8 @@ import type { Theme } from "./theme";
 
 /** Alle UI-Texte an einer Stelle, damit sie später übersetzt werden können. */
 export const texts = {
+  /** Sprache der Texte. Gilt auch für Wörter, die `Intl` liefert, etwa „yesterday“. */
+  language: "en",
   appName: "Videoloader",
   appDescription: "Self-hosted video and audio downloads.",
   theme: {
@@ -76,6 +78,18 @@ export const texts = {
     cancel: "Cancel",
     confirm: "Delete",
   },
+  duplicate: {
+    downloaded: "Already downloaded.",
+    queued: "Already in queue.",
+    /** `media` ist z. B. „Video · 1080p“, `age` z. B. „2 days ago“. */
+    exists: (title: string, media: string, age: string) => `“${title}” exists as ${media}, downloaded ${age}.`,
+    waiting: (title: string, media: string, position: number) => `“${title}” is queued as ${media} (#${position}).`,
+    running: (title: string, media: string) => `“${title}” is downloading as ${media}.`,
+    addAnyway: "Add anyway",
+    cancel: "Cancel",
+    showExisting: "Show existing",
+  },
+  justNow: "just now",
   errors: {
     other: "Download failed.",
   } as Record<string, string>,

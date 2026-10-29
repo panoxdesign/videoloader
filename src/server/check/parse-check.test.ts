@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import { parseCheck } from "./parse-check";
 
 const json = (value: unknown) => JSON.stringify(value);
+/** Die Zeile aus `--print` vor dem JSON, mit ID und Titel wie für Dateinamen bereinigt. */
+const fileLine = (id: string, title: string) => `FILE\t${id}\t${title}\n`;
 
 describe("parseCheck", () => {
   it("reads a single video", () => {
-    // Auszug aus `-J --flat-playlist --no-playlist` gegen die Fixture-Seite `clip-one`.
-    const stdout = json({
+    // Auszug aus der Prüfung gegen die Fixture-Seite `clip-one`.
+    const stdout = fileLine("clip-one", "Clip One") + json({
       id: "clip-one",
       title: "Clip One",
       url: "http://fixtures:8080/media/clip-one.mp4",
@@ -26,8 +28,26 @@ describe("parseCheck", () => {
         title: "Clip One",
         thumbnailUrl: "http://fixtures:8080/media/clip.jpg",
         duration: null,
+        fileTitle: "Clip One",
+        fileMediaId: "clip-one",
       },
     });
+  });
+
+  it("takes title and media id for the file name from the print line, as yt-dlp cleaned them", () => {
+    const stdout =
+      fileLine("umlaut-clip", "Grüße aus Köln⧸Zürich： Café？") +
+      json({ _type: "video", extractor_key: "Generic", id: "umlaut-clip", title: "Grüße aus Köln/Zürich: Café?" });
+    expect(parseCheck(stdout)).toMatchObject({
+      kind: "video",
+      media: { title: "Grüße aus Köln/Zürich: Café?", fileTitle: "Grüße aus Köln⧸Zürich： Café？", fileMediaId: "umlaut-clip" },
+    });
+  });
+
+  it("keeps percent signs in the file title as they are", () => {
+    // yt-dlp entfernt Tabs und Zeilenumbrüche aus `%(title)S`, deshalb trennt der Tab sicher.
+    const stdout = fileLine("p", "100% sure： 50%% off %(id)s") + json({ _type: "video", extractor_key: "Generic", id: "p" });
+    expect(parseCheck(stdout)).toMatchObject({ kind: "video", media: { fileTitle: "100% sure： 50%% off %(id)s", fileMediaId: "p" } });
   });
 
   it("reads the duration of a video", () => {
@@ -53,7 +73,7 @@ describe("parseCheck", () => {
   it("allows a video without id, title and thumbnail", () => {
     expect(parseCheck(json({ _type: "video" }))).toEqual({
       kind: "video",
-      media: { source: null, mediaId: null, title: null, thumbnailUrl: null, duration: null },
+      media: { source: null, mediaId: null, title: null, thumbnailUrl: null, duration: null, fileTitle: null, fileMediaId: null },
     });
   });
 

@@ -18,6 +18,10 @@ const PAGES: Record<string, { title: string }> = {
   "clip-four": { title: "Clip Four" },
   // Umlaute und Zeichen, die `--windows-filenames` ersetzt, für Dateinamen im Download.
   "umlaut-clip": { title: "Grüße aus Köln/Zürich: Café & Crème brûlée?" },
+  // Für den Duplikat-Ablauf im E2E, damit kein anderer Test dasselbe Medium einreiht.
+  "dup-clip": { title: "Dup Clip" },
+  // `%` im Output-Template wäre ein Feld, wenn die App es nicht maskiert.
+  "percent-clip": { title: "100% sure: 50%% off %(id)s" },
 };
 
 export type FixtureServer = { url: string; close(): Promise<void> };

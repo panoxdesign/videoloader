@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EntryState } from "@/server/db/schema";
 import {
   countByFilter,
+  formatAge,
   formatSize,
   matchesFilter,
   progressFraction,
@@ -117,5 +118,26 @@ describe("formatSize", () => {
   it("follows the locale", () => {
     // Mit geschütztem Leerzeichen vor der Einheit.
     expect(formatSize(1_940_000_000, "de")).toBe("1,9\u00a0GB");
+  });
+});
+
+describe("formatAge", () => {
+  const MINUTE = 60_000;
+  const DAY = 24 * 60 * MINUTE;
+
+  it.each([
+    [10_000, "just now"],
+    [5 * MINUTE, "5 minutes ago"],
+    [3 * 60 * MINUTE, "3 hours ago"],
+    [DAY + MINUTE, "yesterday"],
+    [2 * DAY, "2 days ago"],
+    [45 * DAY, "last month"],
+    [400 * DAY, "last year"],
+  ])("formats an age of %i ms as %s", (ms, text) => {
+    expect(formatAge(ms, "en")).toBe(text);
+  });
+
+  it("follows the locale", () => {
+    expect(formatAge(2 * DAY, "de")).toBe("vorgestern");
   });
 });

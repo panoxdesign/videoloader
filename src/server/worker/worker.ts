@@ -1,11 +1,13 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { spawn } from "node:child_process";
+import { lstatSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { createInterface } from "node:readline";
 import { parseMedia } from "@/lib/media";
 import type { Db } from "../db/open";
 import { queueEntries, type QueueEntry } from "../db/schema";
+import { chooseFileName, extensionOf, nameKey } from "../files/file-name";
 import { isInside } from "../files/inside";
 import type { Logger } from "../log";
 import { dataPaths } from "../paths";
@@ -41,7 +43,7 @@ export function startWorker(deps: WorkerDeps): Worker {
   const tick = () => {
     if (stopped) return;
     while (running.size < SLOTS) {
-      const entry = claimNext(deps.db);
+      const entry = claimNext(deps.db, dataPaths(deps.dataDir).downloads);
       if (!entry) break;
       // Ein Fehler im Slot darf den Next-Prozess nicht als unhandled rejection beenden.
       const slot = runSlot(deps, entry)
@@ -63,8 +65,13 @@ export function startWorker(deps: WorkerDeps): Worker {
   };
 }
 
-/** Setzt den ältesten wartenden Eintrag in einer Transaktion auf läuft. */
-function claimNext(db: Db): QueueEntry | undefined {
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/**
+ * Setzt den ältesten wartenden Eintrag in einer Transaktion auf läuft und reserviert dabei
+ * seinen Dateinamen. So bekommen auch mehrere Slots nie denselben Namen.
+ */
+function claimNext(db: Db, downloadsDir: string): QueueEntry | undefined {
   return db.transaction((tx) => {
     const next = tx
       .select()
@@ -76,11 +83,41 @@ function claimNext(db: Db): QueueEntry | undefined {
     if (!next) return undefined;
     return tx
       .update(queueEntries)
-      .set({ state: "running", phase: "download" })
+      .set({ state: "running", phase: "download", fileName: reserveFileName(tx, downloadsDir, next) })
       .where(and(eq(queueEntries.id, next.id), eq(queueEntries.state, "waiting")))
       .returning()
       .get();
   });
+}
+
+/**
+ * Belegt sind die Namen der anderen laufenden und fertigen Einträge, auch wenn deren Datei
+ * fehlt (sonst träfe ein Delete dort die neue Datei), und alles, was schon unter `downloads/`
+ * liegt: Existiert die Zieldatei, lädt yt-dlp nicht neu und meldet trotzdem Erfolg.
+ * Ein Retry behält seinen Namen, solange er frei ist.
+ */
+function reserveFileName(tx: Tx, downloadsDir: string, entry: QueueEntry) {
+  const others = tx
+    .select({ fileName: queueEntries.fileName, filePath: queueEntries.filePath })
+    .from(queueEntries)
+    .where(and(inArray(queueEntries.state, ["running", "done"]), ne(queueEntries.id, entry.id)))
+    .all();
+  const reserved = new Set(
+    others.flatMap(({ fileName, filePath }) => [
+      ...(fileName ? [nameKey(fileName)] : []),
+      ...(filePath ? [nameKey(relative(downloadsDir, filePath))] : []),
+    ]),
+  );
+  const isTaken = (fileName: string) =>
+    reserved.has(nameKey(fileName)) || lstatSync(join(downloadsDir, fileName), { throwIfNoEntry: false }) !== undefined;
+
+  if (entry.fileName && !isTaken(entry.fileName)) return entry.fileName;
+  // Ohne bereinigten Titel nur bei Einträgen, die nicht über die Prüfung kamen.
+  const name =
+    entry.fileTitle && entry.fileMediaId
+      ? { title: entry.fileTitle, mediaId: entry.fileMediaId }
+      : { title: "Queue entry", mediaId: String(entry.id) };
+  return chooseFileName({ ...name, ext: extensionOf(entry.mediaType) }, isTaken);
 }
 
 async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry: QueueEntry) {
@@ -97,9 +134,11 @@ async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry
 
     const media = parseMedia(entry);
     if (!media) throw new Error(`invalid media type ${entry.mediaType} / ${entry.resolution}`);
+    if (!entry.fileName) throw new Error("no reserved file name");
     const args = buildDownloadArgs({
       url: entry.url,
       media,
+      fileName: entry.fileName,
       downloadsDir: paths.downloads,
       tmpDir,
       cacheDir: paths.cache,

@@ -1,15 +1,19 @@
 import type { Media } from "@/lib/media";
+import { FILE_LINE } from "../check/parse-check";
+import { outputTemplate } from "../files/file-name";
 
 export type DownloadArgsInput = {
   url: string;
   media: Media;
+  /** Der reservierte Name unter `downloads/`, mit Endung. */
+  fileName: string;
   downloadsDir: string;
   tmpDir: string;
   cacheDir: string;
 };
 
 /** Argumente für einen Download als MP4 mit Auflösungsgrenze oder als MP3. */
-export function buildDownloadArgs({ url, media, downloadsDir, tmpDir, cacheDir }: DownloadArgsInput): string[] {
+export function buildDownloadArgs({ url, media, fileName, downloadsDir, tmpDir, cacheDir }: DownloadArgsInput): string[] {
   return [
     "--no-playlist",
     "--newline",
@@ -22,12 +26,11 @@ export function buildDownloadArgs({ url, media, downloadsDir, tmpDir, cacheDir }
     "--print",
     "after_move:DONE %(.{filepath,id,title,ext,extractor_key,format_id})j",
     "--windows-filenames",
-    "--trim-filenames", "180",
     ...commonArgs(cacheDir),
     ...mediaArgs(media),
     "-P", downloadsDir,
     "-P", `temp:${tmpDir}`,
-    "-o", "%(title)s [%(id)s].%(ext)s",
+    "-o", outputTemplate(fileName),
     "--",
     url,
   ];
@@ -35,9 +38,22 @@ export function buildDownloadArgs({ url, media, downloadsDir, tmpDir, cacheDir }
 
 export type CheckArgsInput = { url: string; cacheDir: string };
 
-/** Argumente für die Prüfung bei „Add“: ein JSON-Objekt, bei Playlists mit Flat-Einträgen. */
+/**
+ * Argumente für die Prüfung bei „Add“: ein JSON-Objekt, bei Playlists mit Flat-Einträgen.
+ * Davor steht je Medium eine Zeile mit Medien-ID und Titel, so bereinigt, wie yt-dlp sie in
+ * Dateinamen schreibt. Daraus bildet die App den Namen der Mediendatei.
+ */
 export function buildCheckArgs({ url, cacheDir }: CheckArgsInput): string[] {
-  return ["-J", "--flat-playlist", "--no-playlist", ...commonArgs(cacheDir), "--", url];
+  return [
+    "-J",
+    "--flat-playlist",
+    "--no-playlist",
+    "--windows-filenames",
+    "--print", `${FILE_LINE}\t%(id)S\t%(title)S`,
+    ...commonArgs(cacheDir),
+    "--",
+    url,
+  ];
 }
 
 /** Gleich in Prüfung, Vorschau und Download. */

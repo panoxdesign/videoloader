@@ -20,7 +20,19 @@ describe("link check", () => {
         title: "Clip One",
         thumbnailUrl: `${fixtureUrl}/media/clip.jpg`,
         duration: null,
+        fileTitle: "Clip One",
+        fileMediaId: "clip-one",
       },
+    });
+  });
+
+  it.each([
+    ["umlaut-clip", "Grüße aus Köln/Zürich: Café & Crème brûlée?", "Grüße aus Köln⧸Zürich： Café & Crème brûlée？"],
+    ["percent-clip", "100% sure: 50%% off %(id)s", "100% sure： 50%% off %(id)s"],
+  ])("knows the title of %s as yt-dlp cleans it for file names", async (page, title, fileTitle) => {
+    expect(await check(`${fixtureUrl}/videos/${page}`)).toMatchObject({
+      kind: "video",
+      media: { title, fileTitle, fileMediaId: page },
     });
   });
 

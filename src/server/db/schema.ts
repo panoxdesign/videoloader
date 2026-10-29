@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { MEDIA_TYPES, RESOLUTIONS } from "../../lib/media";
 
 /** wartend, läuft, fertig, fehlgeschlagen, abgebrochen */
@@ -21,6 +21,9 @@ export const queueEntries = sqliteTable(
     thumbnailUrl: text(),
     /** In Sekunden. */
     duration: real(),
+    /** Titel und Medien-ID, wie yt-dlp sie für Dateinamen bereinigt. Aus der Prüfung. */
+    fileTitle: text(),
+    fileMediaId: text(),
     mediaType: text({ enum: MEDIA_TYPES }).notNull(),
     resolution: text({ enum: RESOLUTIONS }),
     state: text({ enum: ENTRY_STATES }).notNull(),
@@ -39,6 +42,12 @@ export const queueEntries = sqliteTable(
     postprocessor: text(),
 
     pgid: integer(),
+    /**
+     * Reservierter Name unter `downloads/`, mit Endung. Gesetzt beim Start. Laufende und
+     * fertige Einträge halten ihn, ein Retry behält ihn, solange ihn niemand sonst belegt.
+     */
+    fileName: text(),
+    /** Der echte Pfad aus der `DONE`-Zeile. */
     filePath: text(),
     /** In Bytes, gemessen bei Fertigstellung. */
     fileSize: integer(),
@@ -55,6 +64,10 @@ export const queueEntries = sqliteTable(
       sql`(${t.mediaType} = 'video' and ${t.resolution} is not null and ${t.resolution} in (${sql.raw(RESOLUTIONS.map((r) => `'${r}'`).join(", "))})) or (${t.mediaType} = 'audio' and ${t.resolution} is null)`,
     ),
     index("queue_entries_state_queued_at_idx").on(t.state, t.queuedAt),
+    // Sicherheitsnetz: Den Namen wählt der Worker schon so, dass er frei ist.
+    uniqueIndex("queue_entries_file_name_idx")
+      .on(t.fileName)
+      .where(sql`${t.state} in ('running', 'done')`),
   ],
 );
 

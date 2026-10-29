@@ -57,6 +57,18 @@
   --font-sans: "Figtree Variable", system-ui, sans-serif;
   --font-display: "Bricolage Grotesque Variable", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* „Show existing“: die Zeile leuchtet kurz auf und blendet aus. Nur Farbe, keine Bewegung. */
+  --animate-highlight: highlight 2.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  @keyframes highlight {
+    0%,
+    40% {
+      background-color: var(--secondary);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
 }
 
 :root {
