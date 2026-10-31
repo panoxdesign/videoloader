@@ -55,6 +55,39 @@ describe("chooseFileName", () => {
   });
 });
 
+describe("chooseFileName for a playlist entry", () => {
+  const media = { title: "Clip One", mediaId: "clip-one", ext: "mp4" };
+
+  it("puts the entry into the playlist folder with its number, at least three digits", () => {
+    expect(chooseFileName({ ...media, playlist: { folder: "My Mix", number: 1 } }, () => false)).toBe(
+      "My Mix/001 - Clip One [clip-one].mp4",
+    );
+    expect(chooseFileName({ ...media, playlist: { folder: "My Mix", number: 42 } }, () => false)).toBe(
+      "My Mix/042 - Clip One [clip-one].mp4",
+    );
+    expect(chooseFileName({ ...media, playlist: { folder: "My Mix", number: 1234 } }, () => false)).toBe(
+      "My Mix/1234 - Clip One [clip-one].mp4",
+    );
+  });
+
+  it("counts up inside the folder", () => {
+    const taken = new Set(["My Mix/001 - Clip One [clip-one].mp4"]);
+    expect(chooseFileName({ ...media, playlist: { folder: "My Mix", number: 1 } }, (name) => taken.has(name))).toBe(
+      "My Mix/001 - Clip One [clip-one] (2).mp4",
+    );
+  });
+
+  it("keeps number and title within the limit, and shortens an overlong folder name as well", () => {
+    const long = "日本語のタイトル".repeat(20); // 480 Bytes
+    const name = chooseFileName({ ...media, title: long, playlist: { folder: long, number: 7 } }, () => false);
+    const [folder, file] = name.split("/");
+    expect(bytes(folder)).toBeLessThanOrEqual(MAX_NAME_BYTES);
+    expect(folder).toMatch(/^日本語/);
+    expect(bytes(file.replace(/\.mp4$/, ""))).toBeLessThanOrEqual(MAX_NAME_BYTES);
+    expect(file).toMatch(/^007 - 日本語.* \[clip-one\]\.mp4$/);
+  });
+});
+
 describe("nameKey", () => {
   it("treats names as equal regardless of case and Unicode normalization", () => {
     expect(nameKey("Café [x].mp4")).toBe(nameKey("CAFÉ [X].MP4"));

@@ -25,6 +25,11 @@ export const texts = {
     // Vorläufig, bis Ticket 26 den Playlist-Dialog bringt.
     playlistNotYet: "This link is a playlist. Playlists can't be added yet – paste a link to a single video.",
   },
+  playlist: {
+    /** Ab 100 ausgewählten Einträgen über dem Fuß. `duration` etwa „~2 h“. */
+    largeSelection: (duration: string) =>
+      `Large selection – downloads are spaced out to avoid rate limits, this will take at least ${duration}`,
+  },
   media: {
     label: "Media type",
     video: "Video",

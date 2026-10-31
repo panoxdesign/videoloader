@@ -14,25 +14,37 @@ export function extensionOf(mediaType: MediaType) {
 }
 
 /**
- * `<Titel> [<Medien-ID>]`, ab `n = 2` mit Suffix ` (n)`, ohne Endung. Titel und ID kommen schon
- * bereinigt von yt-dlp. Ein zu langer Titel wird gekürzt, nie der Suffix.
+ * Ordner und Nummer eines Playlist-Eintrags. Der Ordnername kommt schon bereinigt von yt-dlp,
+ * ein zu langer wird wie der Titel auf `MAX_NAME_BYTES` gekürzt.
  */
-export function baseName(title: string, mediaId: string, n = 1) {
+export type PlaylistPlace = { folder: string; number: number };
+
+/**
+ * `<Titel> [<Medien-ID>]`, ab `n = 2` mit Suffix ` (n)`, ohne Endung. Titel und ID kommen schon
+ * bereinigt von yt-dlp. Ein zu langer Titel wird gekürzt, nie der Suffix. `prefix` steht vor
+ * dem Titel und zählt zur Länge, etwa die Nummer eines Playlist-Eintrags.
+ */
+export function baseName(title: string, mediaId: string, n = 1, prefix = "") {
   const id = `[${truncateUtf8(mediaId, MAX_ID_BYTES)}]`;
   const suffix = n > 1 ? ` (${n})` : "";
-  const budget = MAX_NAME_BYTES - byteLength(id) - byteLength(suffix) - 1;
+  const budget = MAX_NAME_BYTES - byteLength(prefix) - byteLength(id) - byteLength(suffix) - 1;
   const short = truncateUtf8(title, Math.max(0, budget));
   const head = short === title ? title : short.trimEnd();
-  return `${head ? `${head} ` : ""}${id}${suffix}`;
+  return `${prefix}${head ? `${head} ` : ""}${id}${suffix}`;
 }
 
-/** Der erste freie Name mit Endung, wie ein Dateimanager: ohne Suffix, dann ` (2)`, ` (3)` usw. */
+/**
+ * Der erste freie Name mit Endung, wie ein Dateimanager: ohne Suffix, dann ` (2)`, ` (3)` usw.
+ * Ein Playlist-Eintrag heißt `<Ordner>/<Nr> - <Titel> [<Medien-ID>]`, die Nummer mindestens dreistellig.
+ */
 export function chooseFileName(
-  { title, mediaId, ext }: { title: string; mediaId: string; ext: string },
+  { title, mediaId, ext, playlist }: { title: string; mediaId: string; ext: string; playlist?: PlaylistPlace },
   isTaken: (fileName: string) => boolean,
 ) {
+  const folder = playlist ? `${truncateUtf8(playlist.folder, MAX_NAME_BYTES).trimEnd()}/` : "";
+  const prefix = playlist ? `${String(playlist.number).padStart(3, "0")} - ` : "";
   for (let n = 1; n < MAX_SUFFIX; n++) {
-    const fileName = `${baseName(title, mediaId, n)}.${ext}`;
+    const fileName = `${folder}${baseName(title, mediaId, n, prefix)}.${ext}`;
     if (!isTaken(fileName)) return fileName;
   }
   throw new Error(`no free file name for ${title} [${mediaId}]`);
