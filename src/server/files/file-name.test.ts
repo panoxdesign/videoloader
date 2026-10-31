@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseName, chooseFileName, extensionOf, MAX_NAME_BYTES, nameKey, outputTemplate } from "./file-name";
+import { baseName, chooseFileName, extensionOf, MAX_NAME_BYTES, nameKey, outputTemplate, playlistFolder } from "./file-name";
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 
@@ -85,6 +85,17 @@ describe("chooseFileName for a playlist entry", () => {
     expect(folder).toMatch(/^日本語/);
     expect(bytes(file.replace(/\.mp4$/, ""))).toBeLessThanOrEqual(MAX_NAME_BYTES);
     expect(file).toMatch(/^007 - 日本語.* \[clip-one\]\.mp4$/);
+  });
+});
+
+describe("playlistFolder", () => {
+  it("is the playlist name as yt-dlp cleaned it", () => {
+    expect(playlistFolder({ fileTitle: "Clips： The Mix", fileId: "PL123" })).toBe("Clips： The Mix");
+  });
+
+  it("falls back to the playlist id, then to a plain word", () => {
+    expect(playlistFolder({ fileTitle: null, fileId: "PL123" })).toBe("Playlist [PL123]");
+    expect(playlistFolder({ fileTitle: null, fileId: null })).toBe("Playlist");
   });
 });
 

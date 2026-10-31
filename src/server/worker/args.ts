@@ -51,7 +51,7 @@ export function buildCheckArgs({ url, cacheDir }: CheckArgsInput): string[] {
     "--windows-filenames",
     // `|` setzt fehlende Felder leer statt „NA“.
     "--print", `${FILE_LINE}\t%(id|)S\t%(title|)S`,
-    "--print", `playlist:${PLAYLIST_LINE}\t%(title|)S`,
+    "--print", `playlist:${PLAYLIST_LINE}\t%(id|)S\t%(title|)S`,
     ...commonArgs(cacheDir),
     "--",
     url,

@@ -51,6 +51,8 @@ describe("link check", () => {
       kind: "playlist",
       title: "Clips: The Mix",
       fileTitle: "Clips： The Mix",
+      // Der generic-Extractor nimmt die URL als ID, `--windows-filenames` ersetzt `:` und `/`.
+      fileId: expect.stringMatching(/^http：⧸⧸.+⧸feed\.rss$/),
       entries: [entry("clip-one", "Clip One"), entry("clip-two", "Clip Two"), entry("clip-three", "Clip Three")],
     });
   });

@@ -69,8 +69,8 @@ describe("buildCheckArgs", () => {
     expect(args).toContain("--windows-filenames");
   });
 
-  it("prints the playlist name cleaned for the folder, once per playlist", () => {
-    expect(valuesOf(args, "--print")).toContain("playlist:PLAYLIST\t%(title|)S");
+  it("prints playlist id and name cleaned for the folder, once per playlist", () => {
+    expect(valuesOf(args, "--print")).toContain("playlist:PLAYLIST\t%(id|)S\t%(title|)S");
     expect(args).toContain("--windows-filenames");
   });
 

@@ -4,8 +4,8 @@ import { parseCheck } from "./parse-check";
 const json = (value: unknown) => JSON.stringify(value);
 /** Die Zeile aus `--print` vor dem JSON, mit ID und Titel wie für Dateinamen bereinigt. */
 const fileLine = (id: string, title: string) => `FILE\t${id}\t${title}\n`;
-/** Die Zeile aus `--print playlist:…` mit dem Playlist-Namen, bereinigt für den Ordner. */
-const playlistLine = (title: string) => `PLAYLIST\t${title}\n`;
+/** Die Zeile aus `--print playlist:…` mit Playlist-ID und -Namen, bereinigt für den Ordner. */
+const playlistLine = (id: string, title: string) => `PLAYLIST\t${id}\t${title}\n`;
 
 describe("parseCheck", () => {
   it("reads a single video", () => {
@@ -80,7 +80,7 @@ describe("parseCheck", () => {
   });
 
   it("reads a playlist with flat entries", () => {
-    const stdout = fileLine("abc", "How Rockets Land Themselves") + playlistLine("Space Engineering Explained") + json({
+    const stdout = fileLine("abc", "How Rockets Land Themselves") + playlistLine("PL123", "Space Engineering Explained") + json({
       _type: "playlist",
       extractor_key: "YoutubeTab",
       id: "PL123",
@@ -102,6 +102,7 @@ describe("parseCheck", () => {
       kind: "playlist",
       title: "Space Engineering Explained",
       fileTitle: "Space Engineering Explained",
+      fileId: "PL123",
       entries: [
         {
           url: "https://www.youtube.com/watch?v=abc",
@@ -144,7 +145,7 @@ describe("parseCheck", () => {
     const stdout =
       fileLine("", "Clip One") +
       fileLine("", "Clip⧸Two？") +
-      playlistLine("Fixture Feed： Clips⧸Mix？") +
+      playlistLine("http：⧸⧸fixtures：8080⧸feed.rss", "Fixture Feed： Clips⧸Mix？") +
       json({
         _type: "playlist",
         extractor_key: "Generic",
@@ -159,6 +160,7 @@ describe("parseCheck", () => {
       kind: "playlist",
       title: "Fixture Feed: Clips/Mix?",
       fileTitle: "Fixture Feed： Clips⧸Mix？",
+      fileId: "http：⧸⧸fixtures：8080⧸feed.rss",
       entries: [
         { url: "http://fixtures:8080/videos/clip-one", fileTitle: "Clip One", fileMediaId: null },
         { url: "http://fixtures:8080/videos/clip-two", fileTitle: "Clip⧸Two？", fileMediaId: null },

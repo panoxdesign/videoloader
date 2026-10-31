@@ -75,3 +75,15 @@ export const queueEntries = sqliteTable(
 );
 
 export type QueueEntry = typeof queueEntries.$inferSelect;
+
+/**
+ * Zwischenspeicher der Playlist-Vorschau, bis „Add x to queue“ einreiht. Der Browser kennt nur
+ * den Schlüssel, Titel, Medien-IDs und Dateinamen kommen nie aus dem Browser. Eine Zeile gilt
+ * etwa 15 min und wird beim Einreihen gelöscht.
+ */
+export const playlistPreviews = sqliteTable("playlist_previews", {
+  key: text().primaryKey(),
+  expiresAt: integer().notNull(),
+  /** Die Vorschau als JSON, sie wird nur als Ganzes geschrieben und gelesen. */
+  data: text({ mode: "json" }).notNull(),
+});

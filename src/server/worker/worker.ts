@@ -5,7 +5,7 @@ import { mkdir, rm, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { createInterface } from "node:readline";
 import { parseMedia } from "@/lib/media";
-import type { Db } from "../db/open";
+import type { Db, Tx } from "../db/open";
 import { NAME_HOLDING_STATES, queueEntries, type QueueEntry } from "../db/schema";
 import { chooseFileName, extensionOf, nameKey } from "../files/file-name";
 import { isInside } from "../files/inside";
@@ -70,7 +70,6 @@ export function startWorker(deps: WorkerDeps): Worker {
   };
 }
 
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /**
  * Setzt den ältesten wartenden Eintrag in einer Transaktion auf läuft und reserviert dabei

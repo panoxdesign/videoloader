@@ -17,13 +17,13 @@ export type PlaylistEntry = CheckedMedia & FileNaming & { url: string };
 
 /** Kennung der `--print`-Zeile je Medium, sie steht vor dem JSON. */
 export const FILE_LINE = "FILE";
-/** Kennung der `--print playlist:`-Zeile mit dem Playlist-Namen, bereinigt wie ein Dateiname. */
+/** Kennung der `--print playlist:`-Zeile mit Playlist-ID und -Namen, bereinigt wie ein Dateiname. */
 export const PLAYLIST_LINE = "PLAYLIST";
 
 export type CheckResult =
   | { kind: "video"; media: CheckedMedia & FileNaming }
-  /** `fileTitle` ist der Playlist-Name für den Ordner, wie yt-dlp ihn bereinigt. */
-  | { kind: "playlist"; title: string | null; fileTitle: string | null; entries: PlaylistEntry[] }
+  /** `fileTitle` und `fileId` sind Playlist-Name und -ID für den Ordner, wie yt-dlp sie bereinigt. */
+  | { kind: "playlist"; title: string | null; fileTitle: string | null; fileId: string | null; entries: PlaylistEntry[] }
   /** `error` ist die erste `ERROR:`-Zeile von yt-dlp, `timedOut` heißt abgebrochen. */
   | { kind: "none"; error?: string; timedOut?: true };
 
@@ -64,8 +64,8 @@ export function parseCheck(stdout: string): CheckResult {
       return [{ url, ...media(entry, string(entry.ie_key) ?? source), ...(fileLines[i] ?? noNaming) }];
     });
     if (entries.length === 0) return { kind: "none" };
-    const [fileTitle] = printed(lines, PLAYLIST_LINE)[0] ?? [];
-    return { kind: "playlist", title: string(raw.title), fileTitle: string(fileTitle), entries };
+    const [fileId, fileTitle] = printed(lines, PLAYLIST_LINE)[0] ?? [];
+    return { kind: "playlist", title: string(raw.title), fileTitle: string(fileTitle), fileId: string(fileId), entries };
   }
 
   return { kind: "none" };

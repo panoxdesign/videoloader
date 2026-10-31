@@ -14,6 +14,15 @@ export function extensionOf(mediaType: MediaType) {
 }
 
 /**
+ * Ordnername einer Playlist: ihr Name, wie yt-dlp ihn bereinigt. Ohne Namen `Playlist [<ID>]`,
+ * analog zu `Queue entry [<id>]`, ohne beides nur `Playlist`.
+ */
+export function playlistFolder({ fileTitle, fileId }: { fileTitle: string | null; fileId: string | null }) {
+  if (fileTitle) return fileTitle;
+  return fileId ? `Playlist [${fileId}]` : "Playlist";
+}
+
+/**
  * Ordner und Nummer eines Playlist-Eintrags. Der Ordnername kommt schon bereinigt von yt-dlp,
  * ein zu langer wird wie der Titel auf `MAX_NAME_BYTES` gekürzt.
  */
