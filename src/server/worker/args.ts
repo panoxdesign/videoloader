@@ -1,5 +1,5 @@
 import type { Media } from "@/lib/media";
-import { FILE_LINE } from "../check/parse-check";
+import { FILE_LINE, PLAYLIST_LINE } from "../check/parse-check";
 import { outputTemplate } from "../files/file-name";
 
 export type DownloadArgsInput = {
@@ -49,7 +49,9 @@ export function buildCheckArgs({ url, cacheDir }: CheckArgsInput): string[] {
     "--flat-playlist",
     "--no-playlist",
     "--windows-filenames",
-    "--print", `${FILE_LINE}\t%(id)S\t%(title)S`,
+    // `|` setzt fehlende Felder leer statt „NA“.
+    "--print", `${FILE_LINE}\t%(id|)S\t%(title|)S`,
+    "--print", `playlist:${PLAYLIST_LINE}\t%(title|)S`,
     ...commonArgs(cacheDir),
     "--",
     url,

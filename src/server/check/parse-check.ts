@@ -13,14 +13,17 @@ export type CheckedMedia = {
 export type FileNaming = { fileTitle: string | null; fileMediaId: string | null };
 
 /** Für den Queue-Eintrag gilt das `url`-Feld des Flat-Eintrags. */
-export type PlaylistEntry = CheckedMedia & { url: string };
+export type PlaylistEntry = CheckedMedia & FileNaming & { url: string };
 
-/** Kennung der `--print`-Zeile, die vor dem JSON steht. */
+/** Kennung der `--print`-Zeile je Medium, sie steht vor dem JSON. */
 export const FILE_LINE = "FILE";
+/** Kennung der `--print playlist:`-Zeile mit dem Playlist-Namen, bereinigt wie ein Dateiname. */
+export const PLAYLIST_LINE = "PLAYLIST";
 
 export type CheckResult =
   | { kind: "video"; media: CheckedMedia & FileNaming }
-  | { kind: "playlist"; title: string | null; entries: PlaylistEntry[] }
+  /** `fileTitle` ist der Playlist-Name für den Ordner, wie yt-dlp ihn bereinigt. */
+  | { kind: "playlist"; title: string | null; fileTitle: string | null; entries: PlaylistEntry[] }
   /** `error` ist die erste `ERROR:`-Zeile von yt-dlp, `timedOut` heißt abgebrochen. */
   | { kind: "none"; error?: string; timedOut?: true };
 
@@ -28,7 +31,8 @@ type Raw = Record<string, unknown>;
 
 /**
  * Übersetzt die Ausgabe der Prüfung in ein Prüfergebnis: zuerst die `FILE`-Zeilen aus
- * `--print`, als letzte Zeile das JSON von `-J --flat-playlist`.
+ * `--print`, eine je Medium in Playlist-Reihenfolge, bei Playlists dann die `PLAYLIST`-Zeile,
+ * als letzte Zeile das JSON von `-J --flat-playlist`.
  */
 export function parseCheck(stdout: string): CheckResult {
   const lines = stdout.split("\n").filter((line) => line !== "");
@@ -40,27 +44,36 @@ export function parseCheck(stdout: string): CheckResult {
   }
   if (!isObject(raw)) return { kind: "none" };
 
+  const fileLines = printed(lines, FILE_LINE).map(([fileMediaId, fileTitle]): FileNaming => ({
+    fileTitle: string(fileTitle),
+    fileMediaId: string(fileMediaId),
+  }));
+  const noNaming: FileNaming = { fileTitle: null, fileMediaId: null };
+
   if (raw._type === "video") {
-    // Ticket 26: Bei Playlists gibt es eine Zeile je Flat-Eintrag, die nutzt erst der Vorschau-Dialog.
-    const [, fileMediaId, fileTitle] = lines.find((line) => line.startsWith(`${FILE_LINE}\t`))?.split("\t") ?? [];
-    return {
-      kind: "video",
-      media: { ...media(raw, string(raw.extractor_key)), fileTitle: string(fileTitle), fileMediaId: string(fileMediaId) },
-    };
+    return { kind: "video", media: { ...media(raw, string(raw.extractor_key)), ...(fileLines[0] ?? noNaming) } };
   }
 
   if (raw._type === "playlist" || raw._type === "multi_video") {
     const source = string(raw.extractor_key);
-    const entries = (Array.isArray(raw.entries) ? raw.entries : []).filter(isObject).flatMap((entry) => {
-      const url = string(entry.url);
+    // Die `FILE`-Zeilen gehören der Reihe nach zu den Einträgen, deshalb erst zuordnen, dann aussortieren.
+    const entries = (Array.isArray(raw.entries) ? raw.entries : []).flatMap((entry, i) => {
+      const url = isObject(entry) ? string(entry.url) : null;
+      if (!isObject(entry) || !url) return [];
       // Flat-Einträge nennen ihre Quelle `ie_key`, beim generic-Extractor fehlt sie.
-      return url ? [{ url, ...media(entry, string(entry.ie_key) ?? source) }] : [];
+      return [{ url, ...media(entry, string(entry.ie_key) ?? source), ...(fileLines[i] ?? noNaming) }];
     });
     if (entries.length === 0) return { kind: "none" };
-    return { kind: "playlist", title: string(raw.title), entries };
+    const [fileTitle] = printed(lines, PLAYLIST_LINE)[0] ?? [];
+    return { kind: "playlist", title: string(raw.title), fileTitle: string(fileTitle), entries };
   }
 
   return { kind: "none" };
+}
+
+/** Die Felder der `--print`-Zeilen mit dieser Kennung, ohne die Kennung. */
+function printed(lines: string[], tag: string) {
+  return lines.filter((line) => line.startsWith(`${tag}\t`)).map((line) => line.split("\t").slice(1));
 }
 
 function media(raw: Raw, source: string | null): CheckedMedia {

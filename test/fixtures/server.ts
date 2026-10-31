@@ -24,6 +24,12 @@ const PAGES: Record<string, { title: string }> = {
   "percent-clip": { title: "100% sure: 50%% off %(id)s" },
 };
 
+/**
+ * RSS-Feed als Playlist. yt-dlp liefert die Einträge flach, ohne ID, Dauer und Vorschaubild.
+ * Der Titel enthält `:`, das `--windows-filenames` für den Ordnernamen ersetzt.
+ */
+const FEED = { title: "Clips: The Mix", pages: ["clip-one", "clip-two", "clip-three"] };
+
 export type FixtureServer = { url: string; close(): Promise<void> };
 
 /** `?rate=<Bytes pro Sekunde>` an einer Seite drosselt die Auslieferung ihres Mediums. */
@@ -59,6 +65,22 @@ export async function startFixtureServer(options: {
   </head>
   <body></body>
 </html>`);
+      return;
+    }
+
+    if (url.pathname === "/feed.rss") {
+      const items = FEED.pages.map(
+        (page) => `<item><title>${escapeHtml(PAGES[page].title)}</title><link>${origin}/videos/${page}</link></item>`,
+      );
+      res.setHeader("content-type", "application/rss+xml; charset=utf-8");
+      res.end(`<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>${escapeHtml(FEED.title)}</title>
+    <link>${origin}/</link>
+    ${items.join("\n    ")}
+  </channel>
+</rss>`);
       return;
     }
 

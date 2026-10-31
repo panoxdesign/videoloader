@@ -4,6 +4,8 @@ import { parseCheck } from "./parse-check";
 const json = (value: unknown) => JSON.stringify(value);
 /** Die Zeile aus `--print` vor dem JSON, mit ID und Titel wie für Dateinamen bereinigt. */
 const fileLine = (id: string, title: string) => `FILE\t${id}\t${title}\n`;
+/** Die Zeile aus `--print playlist:…` mit dem Playlist-Namen, bereinigt für den Ordner. */
+const playlistLine = (title: string) => `PLAYLIST\t${title}\n`;
 
 describe("parseCheck", () => {
   it("reads a single video", () => {
@@ -78,7 +80,7 @@ describe("parseCheck", () => {
   });
 
   it("reads a playlist with flat entries", () => {
-    const stdout = json({
+    const stdout = fileLine("abc", "How Rockets Land Themselves") + playlistLine("Space Engineering Explained") + json({
       _type: "playlist",
       extractor_key: "YoutubeTab",
       id: "PL123",
@@ -99,6 +101,7 @@ describe("parseCheck", () => {
     expect(parseCheck(stdout)).toEqual({
       kind: "playlist",
       title: "Space Engineering Explained",
+      fileTitle: "Space Engineering Explained",
       entries: [
         {
           url: "https://www.youtube.com/watch?v=abc",
@@ -107,6 +110,8 @@ describe("parseCheck", () => {
           title: "How Rockets Land Themselves",
           thumbnailUrl: "https://i.ytimg.com/vi/abc/hqdefault.jpg",
           duration: 312,
+          fileTitle: "How Rockets Land Themselves",
+          fileMediaId: "abc",
         },
       ],
     });
@@ -130,6 +135,33 @@ describe("parseCheck", () => {
       entries: [
         { url: "http://fixtures:8080/videos/clip-one", source: "Generic", mediaId: null, title: "Clip One", thumbnailUrl: null, duration: null },
         { url: "http://fixtures:8080/videos/clip-two", source: "Generic", mediaId: null, title: null, thumbnailUrl: null, duration: null },
+      ],
+    });
+  });
+
+  it("takes the folder name and the file names of the entries from the print lines, in playlist order", () => {
+    // Auszug aus der Prüfung gegen einen RSS-Feed: je Flat-Eintrag eine `FILE`-Zeile, danach der Playlist-Name.
+    const stdout =
+      fileLine("", "Clip One") +
+      fileLine("", "Clip⧸Two？") +
+      playlistLine("Fixture Feed： Clips⧸Mix？") +
+      json({
+        _type: "playlist",
+        extractor_key: "Generic",
+        title: "Fixture Feed: Clips/Mix?",
+        entries: [
+          { _type: "url", url: "http://fixtures:8080/videos/clip-one", title: "Clip One" },
+          { _type: "url", url: "http://fixtures:8080/videos/clip-two", title: "Clip/Two?" },
+        ],
+      });
+
+    expect(parseCheck(stdout)).toMatchObject({
+      kind: "playlist",
+      title: "Fixture Feed: Clips/Mix?",
+      fileTitle: "Fixture Feed： Clips⧸Mix？",
+      entries: [
+        { url: "http://fixtures:8080/videos/clip-one", fileTitle: "Clip One", fileMediaId: null },
+        { url: "http://fixtures:8080/videos/clip-two", fileTitle: "Clip⧸Two？", fileMediaId: null },
       ],
     });
   });

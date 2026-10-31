@@ -36,6 +36,25 @@ describe("link check", () => {
     });
   });
 
+  it("reads an RSS feed as a playlist with flat entries and the folder name as yt-dlp cleans it", async () => {
+    const entry = (page: string, title: string) => ({
+      url: `${fixtureUrl}/videos/${page}`,
+      source: "Generic",
+      mediaId: null,
+      title,
+      thumbnailUrl: null,
+      duration: null,
+      fileTitle: title,
+      fileMediaId: null,
+    });
+    expect(await check(`${fixtureUrl}/feed.rss`)).toEqual({
+      kind: "playlist",
+      title: "Clips: The Mix",
+      fileTitle: "Clips： The Mix",
+      entries: [entry("clip-one", "Clip One"), entry("clip-two", "Clip Two"), entry("clip-three", "Clip Three")],
+    });
+  });
+
   it.each([
     ["a 404 page", `${fixtureUrl}/videos/missing`, /HTTP Error 404/],
     ["something that is not a link", "notaurl", /is not a valid URL/],
