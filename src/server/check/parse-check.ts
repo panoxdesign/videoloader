@@ -59,7 +59,7 @@ export function parseCheck(stdout: string): CheckResult {
     const entries = (Array.isArray(raw.entries) ? raw.entries : []).flatMap((entry) => {
       const url = isObject(entry) ? string(entry.url) : null;
       if (!isObject(entry) || !url) return [];
-      // Zuordnung über die `url`, nicht über die Position: Fehlt eine Zeile oder ist eine zu viel,
+      // Zuordnung über die `url`, nicht über die Reihenfolge: Fehlt eine Zeile oder ist eine zu viel,
       // bekäme sonst jeder folgende Eintrag den Dateinamen eines anderen Mediums. Gleiche Links
       // nehmen ihre Zeilen der Reihe nach. Ohne Zeile prüft der Worker den Eintrag vor dem Start.
       const line = fileLines.findIndex((fileLine) => fileLine.url === url);
