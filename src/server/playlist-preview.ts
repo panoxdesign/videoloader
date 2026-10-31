@@ -12,7 +12,7 @@ import { dataPaths } from "./paths";
 import { enqueue, findDuplicateEntry } from "./queue";
 
 /** So lange lässt sich eine Vorschau einreihen. */
-export const PREVIEW_TTL_MS = 15 * 60_000;
+export const PREVIEW_LIFETIME_MS = 15 * 60_000;
 
 /** Was „Add x to queue“ braucht, festgehalten beim Laden der Vorschau. */
 export type PlaylistPreview = {
@@ -21,7 +21,7 @@ export type PlaylistPreview = {
   title: string | null;
   /** Ordner unter `downloads/`, bereinigt. */
   folder: string;
-  /** `number` ist die Position laut Vorschau, ab 1. */
+  /** `number` ist die Nummer in der Playlist laut Vorschau, ab 1. */
   entries: (PlaylistEntry & { number: number })[];
 };
 
@@ -40,7 +40,7 @@ export function storePreview(
   };
   const key = randomUUID();
   db.delete(playlistPreviews).where(lte(playlistPreviews.expiresAt, now)).run();
-  db.insert(playlistPreviews).values({ key, expiresAt: now + PREVIEW_TTL_MS, data: preview }).run();
+  db.insert(playlistPreviews).values({ key, expiresAt: now + PREVIEW_LIFETIME_MS, data: preview }).run();
   return { key, preview };
 }
 

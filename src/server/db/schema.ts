@@ -32,7 +32,7 @@ export const queueEntries = sqliteTable(
     playlistTitle: text(),
     /** Ordner unter `downloads/`, bereinigt. */
     playlistFolder: text(),
-    /** Position laut Vorschau, ab 1. */
+    /** Nummer in der Playlist laut Vorschau, ab 1. */
     playlistNumber: integer(),
     mediaType: text({ enum: MEDIA_TYPES }).notNull(),
     resolution: text({ enum: RESOLUTIONS }),

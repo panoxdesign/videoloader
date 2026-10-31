@@ -5,7 +5,7 @@ import { describe, expect, inject, it } from "vitest";
 import type { CheckResult } from "@/server/check/parse-check";
 import { queueEntries } from "@/server/db/schema";
 import { dataPaths } from "@/server/paths";
-import { enqueuePlaylist, loadPreview, openPreview, PREVIEW_TTL_MS, storePreview, takePreview } from "@/server/playlist-preview";
+import { enqueuePlaylist, loadPreview, openPreview, PREVIEW_LIFETIME_MS, storePreview, takePreview } from "@/server/playlist-preview";
 import { enqueue, listEntries } from "@/server/queue";
 import { AUDIO, tempDb, VIDEO, YTDLP } from "./helpers";
 
@@ -60,8 +60,8 @@ describe("playlist preview", () => {
     const { db } = await tempDb();
     const { key } = storePreview(db, VIDEO, PLAYLIST, 1_000);
     const { key: other } = storePreview(db, VIDEO, PLAYLIST, 1_000);
-    expect(takePreview(db, key, 1_000 + PREVIEW_TTL_MS - 1)).toBeDefined();
-    expect(takePreview(db, other, 1_000 + PREVIEW_TTL_MS)).toBeUndefined();
+    expect(takePreview(db, key, 1_000 + PREVIEW_LIFETIME_MS - 1)).toBeDefined();
+    expect(takePreview(db, other, 1_000 + PREVIEW_LIFETIME_MS)).toBeUndefined();
   });
 
   it("knows no key it did not hand out", async () => {
@@ -181,7 +181,7 @@ describe("enqueuePlaylist", () => {
     expect(enqueuePlaylist(db, key, [1, 2], 2_000)).toEqual({ kind: "expired" });
 
     const { key: late } = storePreview(db, VIDEO, three, 1_000);
-    expect(enqueuePlaylist(db, late, [2], 1_000 + PREVIEW_TTL_MS)).toEqual({ kind: "expired" });
+    expect(enqueuePlaylist(db, late, [2], 1_000 + PREVIEW_LIFETIME_MS)).toEqual({ kind: "expired" });
     expect(listEntries(db)).toHaveLength(1);
   });
 

@@ -3,7 +3,7 @@ import { texts } from "./texts";
 
 /** Ein Eintrag der Playlist-Vorschau, soweit die Auswahl ihn braucht. */
 export type PreviewItem = {
-  /** Position in der Playlist laut Vorschau, ab 1. */
+  /** Nummer in der Playlist laut Vorschau, ab 1. */
   number: number;
   /** Duplikat-Badge: „Already downloaded“ bzw. „Already in queue“. */
   duplicate?: "downloaded" | "queued";
