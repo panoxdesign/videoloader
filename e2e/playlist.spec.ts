@@ -158,3 +158,30 @@ test("a preview that times out shows the timeout message", async ({ page }) => {
   await alert.getByRole("button", { name: "Close" }).click();
   await expect(alert).toBeHidden();
 });
+
+test("the preview endpoint refuses foreign origins and non-JSON bodies", async ({ page, request, baseURL }) => {
+  const endpoint = "/api/playlist-preview";
+  // Gültige Eingaben: Ohne die Prüfung würde yt-dlp die Vorschau laden.
+  const data = { url: `${fixtureUrl}/feed.rss`, mediaType: "video", resolution: "best" };
+  const ownOrigin = new URL(baseURL ?? "http://localhost:3000").origin;
+
+  const foreign = await request.post(endpoint, { headers: { origin: "https://evil.example" }, data });
+  expect(foreign.status()).toBe(403);
+  expect(await foreign.json()).toEqual({ kind: "none" });
+  // Der API-Kontext schickt von sich aus kein `Origin`.
+  expect((await request.post(endpoint, { data })).status()).toBe(403);
+  // So käme ein fremdes `text/plain`-fetch an, das kein Preflight braucht.
+  const plain = await request.post(endpoint, {
+    headers: { origin: ownOrigin, "content-type": "text/plain" },
+    data: JSON.stringify(data),
+  });
+  expect(plain.status()).toBe(415);
+
+  // Gegenprobe: Das fetch der eigenen Seite kommt durch und scheitert erst an der leeren Eingabe.
+  await page.goto("/");
+  const own = await page.evaluate(
+    (url) => fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((r) => r.status),
+    endpoint,
+  );
+  expect(own).toBe(400);
+});

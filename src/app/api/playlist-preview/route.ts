@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { parseMedia } from "@/lib/media";
 import { getDb } from "@/server/db";
+import { isJsonRequest, isSameOrigin } from "@/server/http/same-origin";
 import { BUNDLED_YTDLP, dataDirFromEnv } from "@/server/paths";
 import { loadPreview, type LoadResult } from "@/server/playlist-preview";
 
@@ -10,6 +11,10 @@ import { loadPreview, type LoadResult } from "@/server/playlist-preview";
  * Server Action.
  */
 export async function POST(request: NextRequest) {
+  // Sonst könnte jede fremde Seite per einfachem POST yt-dlp-Aufrufe starten.
+  if (!isSameOrigin(request.headers)) return Response.json({ kind: "none" } satisfies LoadResult, { status: 403 });
+  if (!isJsonRequest(request.headers)) return Response.json({ kind: "none" } satisfies LoadResult, { status: 415 });
+
   const body: unknown = await request.json().catch(() => undefined);
   const { url, mediaType, resolution } = (typeof body === "object" && body ? body : {}) as Record<string, unknown>;
   const media = parseMedia({ mediaType, resolution });
