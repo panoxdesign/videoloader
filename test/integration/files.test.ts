@@ -130,6 +130,22 @@ describe("delete", () => {
     expect(getEntry(db, entry.id)).toBeUndefined();
   });
 
+  it("removes the playlist folder with its last file, but not before and never downloads/ itself", async () => {
+    const { db, downloads } = await setup();
+    const folder = join(downloads, "Clips： The Mix");
+    await mkdir(folder);
+    const first = await doneEntry(db, join(folder, "001 - Clip One [clip-one].mp4"));
+    const second = await doneEntry(db, join(folder, "002 - Clip Two [clip-two].mp4"));
+    const single = await doneEntry(db, join(downloads, NAME));
+
+    await deleteDoneEntry(db, downloads, first.id);
+    expect(existsSync(folder)).toBe(true);
+    await deleteDoneEntry(db, downloads, second.id);
+    expect(existsSync(folder)).toBe(false);
+    await deleteDoneEntry(db, downloads, single.id);
+    expect(existsSync(downloads)).toBe(true);
+  });
+
   it("removes an entry whose file is missing", async () => {
     const { db, downloads } = await setup();
     const entry = await doneEntry(db, join(downloads, NAME), null);

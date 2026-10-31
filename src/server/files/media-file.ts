@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import { open, realpath, rm, stat } from "node:fs/promises";
-import { basename } from "node:path";
+import { open, realpath, rm, rmdir, stat } from "node:fs/promises";
+import { basename, dirname } from "node:path";
 import { Readable } from "node:stream";
 import type { Db } from "../db/open";
 import { queueEntries, type QueueEntry } from "../db/schema";
@@ -66,14 +66,25 @@ export async function serveMediaFile(downloadsDir: string, entry: MediaEntry | u
 
 /**
  * Löscht einen fertigen Eintrag samt Mediendatei. Liegt die Datei nicht unter `downloads/`,
- * bleibt sie unberührt und nur der Eintrag geht. `false`, wenn es keinen fertigen Eintrag gibt.
+ * bleibt sie unberührt und nur der Eintrag geht. War sie die letzte in ihrem Playlist-Ordner,
+ * geht der Ordner mit. `false`, wenn es keinen fertigen Eintrag gibt.
  */
 export async function deleteDoneEntry(db: Db, downloadsDir: string, id: number) {
   // Direkt statt über `getEntry`: `queue.ts` importiert diese Datei, ein Import zurück wäre ein Kreis.
   const entry = db.select().from(queueEntries).where(eq(queueEntries.id, id)).get();
   if (entry?.state !== "done") return false;
   const file = await findMediaFile(downloadsDir, entry);
-  if (file) await rm(file, { force: true });
+  if (file) {
+    await rm(file, { force: true });
+    await removeEmptyFolder(downloadsDir, dirname(file));
+  }
   db.delete(queueEntries).where(and(eq(queueEntries.id, id), eq(queueEntries.state, "done"))).run();
   return true;
+}
+
+/** `rmdir` scheitert an einem Ordner, in dem noch etwas liegt. `downloads/` selbst bleibt immer. */
+async function removeEmptyFolder(downloadsDir: string, folder: string) {
+  const root = await realpath(downloadsDir).catch(() => undefined);
+  if (!root || folder === root || !isInside(root, folder)) return;
+  await rmdir(folder).catch(() => undefined);
 }
