@@ -1,3 +1,4 @@
+import type { Media } from "./media";
 import { texts } from "./texts";
 
 /** Ein Eintrag der Playlist-Vorschau, soweit die Auswahl ihn braucht. */
@@ -6,6 +7,15 @@ export type PreviewItem = {
   number: number;
   /** Duplikat-Badge: „Already downloaded“ bzw. „Already in queue“. */
   duplicate?: "downloaded" | "queued";
+};
+
+/** Was der Playlist-Dialog im Browser bekommt. Titel und IDs für Dateinamen bleiben auf dem Server. */
+export type PreviewView = {
+  /** Schlüssel des Zwischenspeichers, geht mit den angehakten Nummern zurück. */
+  key: string;
+  title: string | null;
+  media: Media;
+  items: (PreviewItem & { url: string; title: string | null; duration: number | null; thumbnailUrl: string | null })[];
 };
 
 /** Die angehakten Nummern. */

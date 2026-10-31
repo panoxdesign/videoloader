@@ -1,7 +1,13 @@
+import { eq } from "drizzle-orm";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CheckResult } from "@/server/check/parse-check";
-import { PREVIEW_TTL_MS, storePreview, takePreview } from "@/server/playlist-preview";
-import { tempDb, VIDEO } from "./helpers";
+import { queueEntries } from "@/server/db/schema";
+import { dataPaths } from "@/server/paths";
+import { openPreview, PREVIEW_TTL_MS, storePreview, takePreview } from "@/server/playlist-preview";
+import { enqueue } from "@/server/queue";
+import { AUDIO, tempDb, VIDEO } from "./helpers";
 
 type Playlist = Extract<CheckResult, { kind: "playlist" }>;
 
@@ -60,5 +66,72 @@ describe("playlist preview", () => {
     const { db } = await tempDb();
     storePreview(db, VIDEO, PLAYLIST, 1_000);
     expect(takePreview(db, "not-a-key", 2_000)).toBeUndefined();
+  });
+});
+
+describe("openPreview", () => {
+  const youtube = (id: string, title: string) => ({
+    url: `https://www.youtube.com/watch?v=${id}`,
+    source: "Youtube",
+    mediaId: id,
+    title,
+    thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+    duration: 312,
+    fileTitle: title,
+    fileMediaId: id,
+  });
+  const playlist: Playlist = {
+    kind: "playlist",
+    title: "Space",
+    fileTitle: "Space",
+    fileId: "PL1",
+    entries: [youtube("done", "Done One"), youtube("wait", "Waiting One"), youtube("new", "New One"), entry("clip-one", "Clip One")],
+  };
+
+  async function setup() {
+    const { dataDir, db } = await tempDb();
+    const { downloads } = dataPaths(dataDir);
+    await mkdir(downloads, { recursive: true });
+    const checked = (id: string) => ({ source: "Youtube", mediaId: id, title: id, thumbnailUrl: null, duration: null });
+    const done = enqueue(db, "https://youtu.be/done", VIDEO, 1, checked("done"));
+    const filePath = join(downloads, "Done One [done].mp4");
+    await writeFile(filePath, "video");
+    db.update(queueEntries).set({ state: "done", filePath, finishedAt: 2 }).where(eq(queueEntries.id, done.id)).run();
+    enqueue(db, "https://youtu.be/wait", VIDEO, 3, checked("wait"));
+    return { db, downloads };
+  }
+
+  it("marks duplicates per entry, never entries without a media id", async () => {
+    const { db, downloads } = await setup();
+    const view = await openPreview(db, downloads, VIDEO, playlist, 10);
+
+    expect(view.title).toBe("Space");
+    expect(view.media).toEqual(VIDEO);
+    expect(view.items.map(({ number, duplicate }) => [number, duplicate])).toEqual([
+      [1, "downloaded"],
+      [2, "queued"],
+      [3, undefined],
+      [4, undefined],
+    ]);
+  });
+
+  it("counts duplicates only in the same media type", async () => {
+    const { db, downloads } = await setup();
+    const view = await openPreview(db, downloads, AUDIO, playlist, 10);
+    expect(view.items.every((item) => item.duplicate === undefined)).toBe(true);
+  });
+
+  it("shows the browser what the dialog needs, but no file names", async () => {
+    const { db, downloads } = await setup();
+    const view = await openPreview(db, downloads, VIDEO, playlist, 10);
+
+    expect(view.items[2]).toEqual({
+      number: 3,
+      url: "https://www.youtube.com/watch?v=new",
+      title: "New One",
+      duration: 312,
+      thumbnailUrl: "https://i.ytimg.com/vi/new/hqdefault.jpg",
+    });
+    expect(takePreview(db, view.key, 10)?.entries[2]).toMatchObject({ number: 3, fileTitle: "New One", fileMediaId: "new" });
   });
 });
