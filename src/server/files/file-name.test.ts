@@ -77,14 +77,21 @@ describe("chooseFileName for a playlist entry", () => {
     );
   });
 
-  it("keeps number and title within the limit, and shortens an overlong folder name as well", () => {
+  it("keeps number and title within the limit and takes the folder from playlistFolder as it is", () => {
     const long = "日本語のタイトル".repeat(20); // 480 Bytes
-    const name = chooseFileName({ ...media, title: long, playlist: { folder: long, number: 7 } }, () => false);
-    const [folder, file] = name.split("/");
-    expect(bytes(folder)).toBeLessThanOrEqual(MAX_NAME_BYTES);
-    expect(folder).toMatch(/^日本語/);
+    const folder = playlistFolder({ fileTitle: long, fileId: "PL123" });
+    const name = chooseFileName({ ...media, title: long, playlist: { folder, number: 7 } }, () => false);
+    const [dir, file] = name.split("/");
+    expect(dir).toBe(folder);
     expect(bytes(file.replace(/\.mp4$/, ""))).toBeLessThanOrEqual(MAX_NAME_BYTES);
     expect(file).toMatch(/^007 - 日本語.* \[clip-one\]\.mp4$/);
+  });
+
+  it("keeps the playlist id of a folder without a name whole", () => {
+    const folder = playlistFolder({ fileTitle: null, fileId: `https：⧸⧸example.com⧸${"f".repeat(150)}` });
+    const name = chooseFileName({ ...media, playlist: { folder, number: 1 } }, () => false);
+    expect(name).toBe(`${folder}/001 - Clip One [clip-one].mp4`);
+    expect(name).toMatch(/^Playlist \[https.*f\]\//);
   });
 });
 
@@ -96,6 +103,43 @@ describe("playlistFolder", () => {
   it("falls back to the playlist id, then to a plain word", () => {
     expect(playlistFolder({ fileTitle: null, fileId: "PL123" })).toBe("Playlist [PL123]");
     expect(playlistFolder({ fileTitle: null, fileId: null })).toBe("Playlist");
+  });
+
+  it("shortens a long name to the limit, between graphemes and without trailing spaces", () => {
+    const long = "日本語のタイトル".repeat(20); // 480 Bytes
+    const folder = playlistFolder({ fileTitle: long, fileId: "PL123" });
+    expect(bytes(folder)).toBeLessThanOrEqual(MAX_NAME_BYTES);
+    expect(long.startsWith(folder)).toBe(true);
+    expect(bytes(folder)).toBeGreaterThan(MAX_NAME_BYTES - 3);
+
+    const family = "👨‍👩‍👧"; // 18 Bytes, ein Graphem
+    const name = `${"a".repeat(MAX_NAME_BYTES - 10)} ${family.repeat(5)}`;
+    expect(playlistFolder({ fileTitle: name, fileId: "PL123" })).toBe("a".repeat(MAX_NAME_BYTES - 10));
+  });
+
+  it("falls back to the id when nothing of the name fits", () => {
+    const zalgo = `a${"\u0301".repeat(150)}`; // ein Graphem, 301 Bytes
+    expect(playlistFolder({ fileTitle: zalgo, fileId: "PL123" })).toBe("Playlist [PL123]");
+  });
+
+  it("never cuts a long playlist id", () => {
+    // Beim generischen Extraktor (RSS) ist die ID die bereinigte Feed-URL.
+    const id = `https：⧸⧸example.com⧸feeds⧸${"ä".repeat(70)}`;
+    const folder = playlistFolder({ fileTitle: null, fileId: id });
+    expect(folder).toBe(`Playlist [${id}]`);
+    expect(bytes(folder)).toBeLessThanOrEqual(MAX_NAME_BYTES);
+  });
+
+  it("keeps an id that fills the limit exactly", () => {
+    const id = "x".repeat(MAX_NAME_BYTES - bytes("Playlist []"));
+    expect(playlistFolder({ fileTitle: null, fileId: id })).toBe(`Playlist [${id}]`);
+  });
+
+  it("falls back to a plain word when the id alone does not fit", () => {
+    const id = "x".repeat(MAX_NAME_BYTES - bytes("Playlist []") + 1);
+    expect(playlistFolder({ fileTitle: null, fileId: id })).toBe("Playlist");
+    // Mehrbyte-Zeichen zählen in Bytes, nicht in Zeichen: 100 × „ä“ sind 200 Bytes.
+    expect(playlistFolder({ fileTitle: null, fileId: "ä".repeat(100) })).toBe("Playlist");
   });
 });
 

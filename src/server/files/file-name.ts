@@ -15,17 +15,20 @@ export function extensionOf(mediaType: MediaType) {
 
 /**
  * Ordnername einer Playlist: ihr Name, wie yt-dlp ihn bereinigt. Ohne Namen `Playlist [<ID>]`,
- * analog zu `Queue entry [<id>]`, ohne beides nur `Playlist`.
+ * analog zu `Queue entry [<id>]`, ohne beides nur `Playlist`. Höchstens `MAX_NAME_BYTES` lang:
+ * Ein zu langer Name wird wie ein Titel an Graphem-Grenzen gekürzt, die ID nie.
  */
 export function playlistFolder({ fileTitle, fileId }: { fileTitle: string | null; fileId: string | null }) {
-  if (fileTitle) return fileTitle;
-  return fileId ? `Playlist [${fileId}]` : "Playlist";
+  const short = fileTitle ? truncateUtf8(fileTitle, MAX_NAME_BYTES) : "";
+  const name = short === fileTitle ? short : short.trimEnd();
+  if (name) return name;
+  const withId = fileId ? `Playlist [${fileId}]` : "";
+  // Die ID ist beim generischen Extraktor (RSS) die bereinigte Feed-URL und kann lang sein. Eine
+  // halbe ID taugt nicht zum Wiederfinden, also heißt der Ordner dann nur `Playlist`.
+  return withId && byteLength(withId) <= MAX_NAME_BYTES ? withId : "Playlist";
 }
 
-/**
- * Ordner und Nummer eines Playlist-Eintrags. Der Ordnername kommt schon bereinigt von yt-dlp,
- * ein zu langer wird wie der Titel auf `MAX_NAME_BYTES` gekürzt.
- */
+/** Ordner und Nummer eines Playlist-Eintrags. Der Ordner kommt fertig aus `playlistFolder`. */
 export type PlaylistPlace = { folder: string; number: number };
 
 /**
@@ -50,7 +53,7 @@ export function chooseFileName(
   { title, mediaId, ext, playlist }: { title: string; mediaId: string; ext: string; playlist?: PlaylistPlace },
   isTaken: (fileName: string) => boolean,
 ) {
-  const folder = playlist ? `${truncateUtf8(playlist.folder, MAX_NAME_BYTES).trimEnd()}/` : "";
+  const folder = playlist ? `${playlist.folder}/` : "";
   const prefix = playlist ? `${String(playlist.number).padStart(3, "0")} - ` : "";
   for (let n = 1; n < MAX_SUFFIX; n++) {
     const fileName = `${folder}${baseName(title, mediaId, n, prefix)}.${ext}`;
