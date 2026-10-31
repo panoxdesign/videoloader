@@ -69,18 +69,24 @@ export async function startFixtureServer(options: {
     }
 
     if (url.pathname === "/feed.rss") {
+      // `?delay=<ms>` hält die Antwort zurück, für Abbruch und Timeout der Vorschau.
+      const delay = Number(url.searchParams.get("delay")) || 0;
       const items = FEED.pages.map(
         (page) => `<item><title>${escapeHtml(PAGES[page].title)}</title><link>${origin}/videos/${page}</link></item>`,
       );
-      res.setHeader("content-type", "application/rss+xml; charset=utf-8");
-      res.end(`<?xml version="1.0" encoding="utf-8"?>
+      const feed = `<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0">
   <channel>
     <title>${escapeHtml(FEED.title)}</title>
     <link>${origin}/</link>
     ${items.join("\n    ")}
   </channel>
-</rss>`);
+</rss>`;
+      const timer = setTimeout(() => {
+        res.setHeader("content-type", "application/rss+xml; charset=utf-8");
+        res.end(feed);
+      }, delay);
+      res.on("close", () => clearTimeout(timer));
       return;
     }
 

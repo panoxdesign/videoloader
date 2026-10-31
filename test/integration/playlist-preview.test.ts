@@ -1,13 +1,15 @@
 import { eq } from "drizzle-orm";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, inject, it } from "vitest";
 import type { CheckResult } from "@/server/check/parse-check";
 import { queueEntries } from "@/server/db/schema";
 import { dataPaths } from "@/server/paths";
-import { enqueuePlaylist, openPreview, PREVIEW_TTL_MS, storePreview, takePreview } from "@/server/playlist-preview";
+import { enqueuePlaylist, loadPreview, openPreview, PREVIEW_TTL_MS, storePreview, takePreview } from "@/server/playlist-preview";
 import { enqueue, listEntries } from "@/server/queue";
-import { AUDIO, tempDb, VIDEO } from "./helpers";
+import { AUDIO, tempDb, VIDEO, YTDLP } from "./helpers";
+
+const fixtureUrl = inject("fixtureUrl");
 
 type Playlist = Extract<CheckResult, { kind: "playlist" }>;
 
@@ -188,5 +190,36 @@ describe("enqueuePlaylist", () => {
     const { key } = storePreview(db, VIDEO, three, 1_000);
     expect(enqueuePlaylist(db, key, [2, 2, 7, 0, -1], 2_000)).toEqual({ kind: "added", count: 1 });
     expect(listEntries(db).map((e) => e.playlistNumber)).toEqual([2]);
+  });
+});
+
+describe("loadPreview", () => {
+  async function load(url: string, { signal = new AbortController().signal, timeoutMs = 30_000 } = {}) {
+    const { dataDir, db } = await tempDb();
+    return loadPreview({ db, ytDlpPath: YTDLP, dataDir, url, media: VIDEO, signal, timeoutMs, now: 1_000 });
+  }
+
+  it("checks the link and opens the preview", async () => {
+    const result = await load(`${fixtureUrl}/feed.rss`);
+    expect(result).toMatchObject({ kind: "preview", view: { title: "Clips: The Mix", media: VIDEO } });
+    expect(result.kind === "preview" && result.view.items.map((item) => item.title)).toEqual(["Clip One", "Clip Two", "Clip Three"]);
+  });
+
+  it("stops yt-dlp when the browser cancels", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 300);
+    const started = Date.now();
+    expect(await load(`${fixtureUrl}/feed.rss?delay=20000`, { signal: controller.signal })).toEqual({ kind: "cancelled" });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("gives up after the preview timeout", async () => {
+    const started = Date.now();
+    expect(await load(`${fixtureUrl}/feed.rss?delay=20000`, { timeoutMs: 300 })).toEqual({ kind: "timedOut" });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("finds no playlist at a single video", async () => {
+    expect(await load(`${fixtureUrl}/videos/clip-one`)).toEqual({ kind: "none" });
   });
 });

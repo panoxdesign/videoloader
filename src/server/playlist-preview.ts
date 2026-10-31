@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { CHECK_TIMEOUT_MS, checkLink } from "./check/check";
 import { eq, lte } from "drizzle-orm";
 import type { Media } from "@/lib/media";
 import type { PreviewView } from "@/lib/playlist-selection";
@@ -6,6 +7,7 @@ import type { CheckResult, PlaylistEntry } from "./check/parse-check";
 import type { Db, Tx } from "./db/open";
 import { playlistPreviews } from "./db/schema";
 import { playlistFolder } from "./files/file-name";
+import { dataPaths } from "./paths";
 import { enqueue, findDuplicateEntry } from "./queue";
 
 /** So lange lässt sich eine Vorschau einreihen. */
@@ -90,4 +92,46 @@ export function enqueuePlaylist(db: Db, key: string, numbers: readonly number[],
     }
     return { kind: "added" as const, count: chosen.length };
   });
+}
+
+export type LoadResult =
+  | { kind: "preview"; view: PreviewView }
+  /** Der Browser hat abgebrochen („Cancel“ oder Seite verlassen). */
+  | { kind: "cancelled" }
+  /** „Playlist too large to preview (timed out)“, ohne Teil-Vorschau. */
+  | { kind: "timedOut" }
+  /** Keine Playlist am Link. `error` ist die erste `ERROR:`-Zeile von yt-dlp. */
+  | { kind: "none"; error?: string };
+
+/**
+ * Lädt die Vorschau eines Playlist-Links für den Route Handler. `signal` feuert, wenn der Browser
+ * abbricht. Dann oder nach `timeoutMs` wird yt-dlp beendet.
+ */
+export async function loadPreview({
+  db,
+  ytDlpPath,
+  dataDir,
+  url,
+  media,
+  signal,
+  timeoutMs = CHECK_TIMEOUT_MS,
+  now,
+}: {
+  db: Db;
+  ytDlpPath: string;
+  dataDir: string;
+  url: string;
+  media: Media;
+  signal: AbortSignal;
+  timeoutMs?: number;
+  now: number;
+}): Promise<LoadResult> {
+  const paths = dataPaths(dataDir);
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const result = await checkLink({ ytDlpPath, url, cacheDir: paths.cache, signal: AbortSignal.any([signal, timeout]) });
+  if (signal.aborted) return { kind: "cancelled" };
+  if (timeout.aborted) return { kind: "timedOut" };
+  if (result.kind === "none" && result.error) return { kind: "none", error: result.error };
+  if (result.kind !== "playlist") return { kind: "none" };
+  return { kind: "preview", view: await openPreview(db, paths.downloads, media, result, now) };
 }
