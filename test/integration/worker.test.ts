@@ -9,7 +9,8 @@ import type { Media } from "@/lib/media";
 import { checkLink } from "@/server/check/check";
 import { queueEntries } from "@/server/db/schema";
 import { dataPaths } from "@/server/paths";
-import { enqueue, getEntry } from "@/server/queue";
+import { enqueue, getEntry, listEntries } from "@/server/queue";
+import { enqueuePlaylist, storePreview } from "@/server/playlist-preview";
 import { startWorker } from "@/server/worker/worker";
 import { createLogger } from "@/server/log";
 import { AUDIO, tempDataDir, tempDb, VIDEO, waitFor, YTDLP } from "./helpers";
@@ -195,6 +196,57 @@ describe("worker", () => {
     const { streams } = await ffprobe(entry.filePath!);
     expect(streams.filter((s) => s.codec_type === "video" && !s.disposition.attached_pic)).toMatchObject([{ height }]);
     expect(streams.filter((s) => s.codec_type === "audio")).toHaveLength(1);
+  });
+
+  it("finishes an RSS entry without id in the playlist folder with its number", async () => {
+    // Flat-Einträge aus dem Feed kennen keine Medien-ID. Der Worker prüft sie vor der Reservierung.
+    const worker = await startTestWorker();
+    const result = await checkLink({
+      ytDlpPath: YTDLP,
+      url: `${fixtureUrl}/feed.rss`,
+      cacheDir: worker.paths.cache,
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (result.kind !== "playlist") throw new Error(`expected a playlist, got ${result.kind}`);
+    const { key } = storePreview(worker.db, VIDEO, result, Date.now());
+    enqueuePlaylist(worker.db, key, [2], Date.now());
+
+    const entry = await worker.finished(listEntries(worker.db)[0].id);
+    const mediaFile = join(worker.paths.downloads, "Clips： The Mix", "002 - Clip Two [clip-two].mp4");
+    expect(entry).toMatchObject({
+      state: "done",
+      source: "Generic",
+      mediaId: "clip-two",
+      fileName: "Clips： The Mix/002 - Clip Two [clip-two].mp4",
+      filePath: mediaFile,
+      playlistTitle: "Clips: The Mix",
+    });
+    expect(statSync(mediaFile).size).toBeGreaterThan(1000);
+  });
+
+  it("fails a playlist entry whose check before the start finds nothing, and goes on with the next", async () => {
+    const worker = await startTestWorker();
+    const flat = (page: string) => ({
+      url: `${fixtureUrl}/videos/${page}`,
+      source: "Generic",
+      mediaId: null,
+      title: page,
+      thumbnailUrl: null,
+      duration: null,
+      fileTitle: page,
+      fileMediaId: null,
+    });
+    const { key } = storePreview(
+      worker.db,
+      VIDEO,
+      { kind: "playlist", title: "Mix", fileTitle: "Mix", fileId: null, entries: [flat("missing"), flat("clip-one")] },
+      Date.now(),
+    );
+    enqueuePlaylist(worker.db, key, [1, 2], Date.now());
+    const [broken, fine] = listEntries(worker.db);
+
+    expect(await worker.finished(broken.id)).toMatchObject({ state: "failed", fileName: null });
+    expect(await worker.finished(fine.id)).toMatchObject({ state: "done", fileName: "Mix/002 - Clip One [clip-one].mp4" });
   });
 
   it("extracts a 192 kbps MP3 with cover and title", async () => {
