@@ -202,7 +202,7 @@ describe("loadPreview", () => {
   it("checks the link and opens the preview", async () => {
     const result = await load(`${fixtureUrl}/feed.rss`);
     expect(result).toMatchObject({ kind: "preview", view: { title: "Clips: The Mix", media: VIDEO } });
-    expect(result.kind === "preview" && result.view.items.map((item) => item.title)).toEqual(["Clip One", "Clip Two", "Clip Three"]);
+    expect(result.kind === "preview" && result.view.items.map((item) => item.title)).toEqual(["Mix One", "Mix Two", "Mix Three"]);
   });
 
   it("stops yt-dlp when the browser cancels", async () => {

@@ -22,13 +22,17 @@ const PAGES: Record<string, { title: string }> = {
   "dup-clip": { title: "Dup Clip" },
   // `%` im Output-Template wäre ein Feld, wenn die App es nicht maskiert.
   "percent-clip": { title: "100% sure: 50%% off %(id)s" },
+  // Für den RSS-Feed, damit der Playlist-Ablauf im E2E kein Medium mit anderen Tests teilt.
+  "mix-one": { title: "Mix One" },
+  "mix-two": { title: "Mix Two" },
+  "mix-three": { title: "Mix Three" },
 };
 
 /**
  * RSS-Feed als Playlist. yt-dlp liefert die Einträge flach, ohne ID, Dauer und Vorschaubild.
  * Der Titel enthält `:`, das `--windows-filenames` für den Ordnernamen ersetzt.
  */
-const FEED = { title: "Clips: The Mix", pages: ["clip-one", "clip-two", "clip-three"] };
+const FEED = { title: "Clips: The Mix", pages: ["mix-one", "mix-two", "mix-three"] };
 
 export type FixtureServer = { url: string; close(): Promise<void> };
 

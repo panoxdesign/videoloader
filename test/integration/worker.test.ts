@@ -212,12 +212,12 @@ describe("worker", () => {
     enqueuePlaylist(worker.db, key, [2], Date.now());
 
     const entry = await worker.finished(listEntries(worker.db)[0].id);
-    const mediaFile = join(worker.paths.downloads, "Clips： The Mix", "002 - Clip Two [clip-two].mp4");
+    const mediaFile = join(worker.paths.downloads, "Clips： The Mix", "002 - Mix Two [mix-two].mp4");
     expect(entry).toMatchObject({
       state: "done",
       source: "Generic",
-      mediaId: "clip-two",
-      fileName: "Clips： The Mix/002 - Clip Two [clip-two].mp4",
+      mediaId: "mix-two",
+      fileName: "Clips： The Mix/002 - Mix Two [mix-two].mp4",
       filePath: mediaFile,
       playlistTitle: "Clips: The Mix",
     });
