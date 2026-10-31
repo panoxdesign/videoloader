@@ -49,8 +49,9 @@ export function buildCheckArgs({ url, cacheDir }: CheckArgsInput): string[] {
     "--flat-playlist",
     "--no-playlist",
     "--windows-filenames",
-    // `|` setzt fehlende Felder leer statt „NA“.
-    "--print", `${FILE_LINE}\t%(id|)S\t%(title|)S`,
+    // `|` setzt fehlende Felder leer statt „NA“. Die `url` steht auch im Flat-Eintrag des JSON
+    // und verbindet beide, `j` maskiert Tabs darin.
+    "--print", `${FILE_LINE}\t%(url|)j\t%(id|)S\t%(title|)S`,
     "--print", `playlist:${PLAYLIST_LINE}\t%(id|)S\t%(title|)S`,
     ...commonArgs(cacheDir),
     "--",

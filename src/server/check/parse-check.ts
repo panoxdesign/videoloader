@@ -15,7 +15,7 @@ export type FileNaming = { fileTitle: string | null; fileMediaId: string | null 
 /** Für den Queue-Eintrag gilt das `url`-Feld des Flat-Eintrags. */
 export type PlaylistEntry = CheckedMedia & FileNaming & { url: string };
 
-/** Kennung der `--print`-Zeile je Medium, sie steht vor dem JSON. */
+/** Kennung der `--print`-Zeile je Medium mit `url` als JSON, Medien-ID und Titel. Sie steht vor dem JSON. */
 export const FILE_LINE = "FILE";
 /** Kennung der `--print playlist:`-Zeile mit Playlist-ID und -Namen, bereinigt wie ein Dateiname. */
 export const PLAYLIST_LINE = "PLAYLIST";
@@ -31,8 +31,8 @@ type Raw = Record<string, unknown>;
 
 /**
  * Übersetzt die Ausgabe der Prüfung in ein Prüfergebnis: zuerst die `FILE`-Zeilen aus
- * `--print`, eine je Medium in Playlist-Reihenfolge, bei Playlists dann die `PLAYLIST`-Zeile,
- * als letzte Zeile das JSON von `-J --flat-playlist`.
+ * `--print`, eine je Medium, bei Playlists dann die `PLAYLIST`-Zeile, als letzte Zeile das
+ * JSON von `-J --flat-playlist`.
  */
 export function parseCheck(stdout: string): CheckResult {
   const lines = stdout.split("\n").filter((line) => line !== "");
@@ -44,24 +44,28 @@ export function parseCheck(stdout: string): CheckResult {
   }
   if (!isObject(raw)) return { kind: "none" };
 
-  const fileLines = printed(lines, FILE_LINE).map(([fileMediaId, fileTitle]): FileNaming => ({
-    fileTitle: string(fileTitle),
-    fileMediaId: string(fileMediaId),
+  const fileLines = printed(lines, FILE_LINE).map(([url, fileMediaId, fileTitle]) => ({
+    url: jsonString(url),
+    naming: { fileTitle: string(fileTitle), fileMediaId: string(fileMediaId) } satisfies FileNaming,
   }));
   const noNaming: FileNaming = { fileTitle: null, fileMediaId: null };
 
   if (raw._type === "video") {
-    return { kind: "video", media: { ...media(raw, string(raw.extractor_key)), ...(fileLines[0] ?? noNaming) } };
+    return { kind: "video", media: { ...media(raw, string(raw.extractor_key)), ...(fileLines[0]?.naming ?? noNaming) } };
   }
 
   if (raw._type === "playlist" || raw._type === "multi_video") {
     const source = string(raw.extractor_key);
-    // Die `FILE`-Zeilen gehören der Reihe nach zu den Einträgen, deshalb erst zuordnen, dann aussortieren.
-    const entries = (Array.isArray(raw.entries) ? raw.entries : []).flatMap((entry, i) => {
+    const entries = (Array.isArray(raw.entries) ? raw.entries : []).flatMap((entry) => {
       const url = isObject(entry) ? string(entry.url) : null;
       if (!isObject(entry) || !url) return [];
+      // Zuordnung über die `url`, nicht über die Position: Fehlt eine Zeile oder ist eine zu viel,
+      // bekäme sonst jeder folgende Eintrag den Dateinamen eines anderen Mediums. Gleiche Links
+      // nehmen ihre Zeilen der Reihe nach. Ohne Zeile prüft der Worker den Eintrag vor dem Start.
+      const line = fileLines.findIndex((fileLine) => fileLine.url === url);
+      const naming = line === -1 ? noNaming : fileLines.splice(line, 1)[0].naming;
       // Flat-Einträge nennen ihre Quelle `ie_key`, beim generic-Extractor fehlt sie.
-      return [{ url, ...media(entry, string(entry.ie_key) ?? source), ...(fileLines[i] ?? noNaming) }];
+      return [{ url, ...media(entry, string(entry.ie_key) ?? source), ...naming }];
     });
     if (entries.length === 0) return { kind: "none" };
     const [fileId, fileTitle] = printed(lines, PLAYLIST_LINE)[0] ?? [];
@@ -96,6 +100,15 @@ function thumbnail(raw: Raw) {
 
 function isObject(value: unknown): value is Raw {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Ein Feld aus `%(…)j`, sonst `null`. */
+function jsonString(value: string | undefined) {
+  try {
+    return string(JSON.parse(value ?? ""));
+  } catch {
+    return null;
+  }
 }
 
 function string(value: unknown) {
