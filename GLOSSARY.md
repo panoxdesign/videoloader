@@ -32,6 +32,10 @@ _Avoid_: Format, Typ, Modus
 Eine Sammlung von Medien einer Quelle, die per Link angegeben wird und in einzelne Queue-Einträge aufgeteilt wird.
 _Avoid_: Liste, Kanal
 
+**Playlist-Vorschau**:
+Die Medien einer Playlist, wie sie die Prüfung geliefert hat, aus denen man vor dem Einreihen auswählt. Sie gilt 15 Minuten und lässt sich genau einmal einreihen.
+_Avoid_: Auswahl, Playlist-Liste
+
 **Mediendatei**:
 Die fertige heruntergeladene Datei eines Queue-Eintrags, die auf dem Server liegt und über die App abrufbar ist. Jede Mediendatei gehört zu genau einem Queue-Eintrag.
 _Avoid_: Download, Output
