@@ -22,10 +22,25 @@ export const texts = {
     add: "Add",
     checking: "Checking…",
     noMedia: "No downloadable media found at this link.",
-    // Vorläufig, bis Ticket 26 den Playlist-Dialog bringt.
-    playlistNotYet: "This link is a playlist. Playlists can't be added yet – paste a link to a single video.",
   },
   playlist: {
+    loading: "Loading playlist…",
+    /** Nach 5 s unter „Loading playlist…“. */
+    large: "Large playlist – this can take a while",
+    cancel: "Cancel",
+    /** Kopf: „12 videos · will be added as Video · 1080p“. */
+    summary: (count: number, media: string) => `${count} ${count === 1 ? "video" : "videos"} · will be added as ${media}`,
+    selectAll: "Select all",
+    selected: (selected: number, total: number) => `${selected} of ${total} selected`,
+    add: (count: number) => `Add ${count} to queue`,
+    alreadyDownloaded: "Already downloaded",
+    alreadyInQueue: "Already in queue",
+    errorTitle: "Can't preview playlist",
+    timedOut: "Playlist too large to preview (timed out)",
+    // Erscheint erst mit der Fehlerklassifikation aus Ticket 21.
+    rateLimited: "Source is rate-limiting requests, try again later",
+    close: "Close",
+    expired: "This preview has expired. Add the playlist link again.",
     /** Ab 100 ausgewählten Einträgen über dem Fuß. `duration` etwa „~2 h“. */
     largeSelection: (duration: string) =>
       `Large selection – downloads are spaced out to avoid rate limits, this will take at least ${duration}`,
