@@ -6,7 +6,7 @@ import type { CheckResult, PlaylistEntry } from "./check/parse-check";
 import type { Db, Tx } from "./db/open";
 import { playlistPreviews } from "./db/schema";
 import { playlistFolder } from "./files/file-name";
-import { findDuplicateEntry } from "./queue";
+import { enqueue, findDuplicateEntry } from "./queue";
 
 /** So lange lässt sich eine Vorschau einreihen. */
 export const PREVIEW_TTL_MS = 15 * 60_000;
@@ -67,4 +67,27 @@ export async function openPreview(
     }),
   );
   return { key, title: preview.title, media, items };
+}
+
+/**
+ * „Add x to queue“: löst den Schlüssel ein und reiht die angehakten Nummern in Playlist-Reihenfolge
+ * ein, in einer Transaktion. Titel, IDs und Ordner kommen aus dem Zwischenspeicher, nie aus dem
+ * Browser. Unbekannte Nummern zählen nicht.
+ */
+export function enqueuePlaylist(db: Db, key: string, numbers: readonly number[], now: number) {
+  return db.transaction((tx) => {
+    const preview = takePreview(tx, key, now);
+    if (!preview) return { kind: "expired" as const };
+    const ticked = new Set(numbers);
+    const chosen = preview.entries.filter((entry) => ticked.has(entry.number));
+    for (const { number, url, ...checked } of chosen) {
+      enqueue(tx, url, preview.media, now, {
+        ...checked,
+        playlistTitle: preview.title,
+        playlistFolder: preview.folder,
+        playlistNumber: number,
+      });
+    }
+    return { kind: "added" as const, count: chosen.length };
+  });
 }

@@ -1,13 +1,22 @@
 import { and, asc, count, eq, lt, lte, or } from "drizzle-orm";
 import type { Media } from "@/lib/media";
 import type { CheckedMedia, FileNaming } from "./check/parse-check";
-import type { Db } from "./db/open";
+import type { Db, Tx } from "./db/open";
 import { queueEntries, type QueueEntry } from "./db/schema";
 import { findDuplicate, type MediaIdentity } from "./duplicate";
 import { findMediaFile } from "./files/media-file";
 
+/** Was ein Eintrag aus einer Playlist zusätzlich trägt. */
+export type PlaylistPlacement = Pick<QueueEntry, "playlistTitle" | "playlistFolder" | "playlistNumber">;
+
 /** Legt einen wartenden Queue-Eintrag an, mit dem, was die Link-Prüfung schon über das Medium weiß. */
-export function enqueue(db: Db, url: string, media: Media, now: number, checked?: CheckedMedia & Partial<FileNaming>) {
+export function enqueue(
+  db: Db | Tx,
+  url: string,
+  media: Media,
+  now: number,
+  checked?: CheckedMedia & Partial<FileNaming> & Partial<PlaylistPlacement>,
+) {
   return db
     .insert(queueEntries)
     .values({ url, ...checked, ...media, state: "waiting", queuedAt: now })

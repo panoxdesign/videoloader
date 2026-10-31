@@ -27,6 +27,13 @@ export const queueEntries = sqliteTable(
     /** Titel und Medien-ID, wie yt-dlp sie für Dateinamen bereinigt. Aus der Prüfung. */
     fileTitle: text(),
     fileMediaId: text(),
+    // Nur bei Einträgen aus einer Playlist, aus dem Zwischenspeicher der Vorschau.
+    /** Playlist-Name für die Listenzeile. */
+    playlistTitle: text(),
+    /** Ordner unter `downloads/`, bereinigt. */
+    playlistFolder: text(),
+    /** Position laut Vorschau, ab 1. */
+    playlistNumber: integer(),
     mediaType: text({ enum: MEDIA_TYPES }).notNull(),
     resolution: text({ enum: RESOLUTIONS }),
     state: text({ enum: ENTRY_STATES }).notNull(),
