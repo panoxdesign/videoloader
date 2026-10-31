@@ -15,6 +15,8 @@ export type PreviewView = {
   key: string;
   title: string | null;
   media: Media;
+  /** Für den Hinweis zur Mindestdauer. Kommt mit der Vorschau, weil die Seite beim Build vorgerendert wird. */
+  startIntervalSeconds: number;
   items: (PreviewItem & { url: string; title: string | null; duration: number | null; thumbnailUrl: string | null })[];
 };
 

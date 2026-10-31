@@ -1,17 +1,25 @@
 "use client";
 
 import { LoaderCircleIcon, TriangleAlertIcon } from "lucide-react";
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatAge } from "@/lib/queue-view";
+import { parseMedia } from "@/lib/media";
+import { isPlaylistLink } from "@/lib/playlist-link";
+import { formatAge, mediaLabel } from "@/lib/queue-view";
 import { texts } from "@/lib/texts";
 import { addEntry, type AddState, type DuplicateWarning } from "./actions";
+import type { LoadResult } from "@/server/playlist-preview";
 import { MediaOptions } from "./media-options";
+import { PlaylistDialog, type PlaylistDialogState } from "./playlist-dialog";
 
 /**
  * Formular-Karte „Add a download“. Solange die Prüfung läuft, sind Feld und „Add“ gesperrt,
  * ein Doppelklick erzeugt also keinen zweiten Eintrag.
+ *
+ * „Add“ wählt den Weg am Link (ADR 0002): Ein erkannter Playlist-Link lädt die Vorschau über den
+ * Route Handler, abbrechbar mit „Cancel“. Alles andere prüft die Server Action. Liefert sie doch
+ * eine Playlist, öffnet sich der Dialog direkt mit ihrem Ergebnis.
  */
 export function AddForm() {
   const [state, formAction, pending] = useActionState(addEntry, {});
@@ -20,10 +28,60 @@ export function AddForm() {
   const duplicate = state === dismissed ? undefined : state.duplicate;
   const input = useRef<HTMLInputElement>(null);
 
+  // Der Dialog aus dem Route Handler. Sonst zeigt er die Vorschau, die `addEntry` geliefert hat.
+  const [loaded, setLoaded] = useState<PlaylistDialogState>({ kind: "closed" });
+  const loading = useRef<AbortController>(undefined);
+  const dialog: PlaylistDialogState =
+    loaded.kind !== "closed"
+      ? loaded
+      : state.preview && state !== dismissed
+        ? { kind: "preview", view: state.preview }
+        : loaded;
+
+  const closeDialog = () => {
+    loading.current?.abort();
+    loading.current = undefined;
+    setLoaded({ kind: "closed" });
+    setDismissed(state);
+  };
+
+  const loadPreview = async (event: FormEvent<HTMLFormElement>) => {
+    const data = new FormData(event.currentTarget);
+    const url = String(data.get("url") ?? "").trim();
+    const media = parseMedia({ mediaType: data.get("mediaType"), resolution: data.get("resolution") });
+    if (!isPlaylistLink(url) || !media) return;
+    event.preventDefault();
+
+    const controller = new AbortController();
+    loading.current = controller;
+    setDismissed(state);
+    setLoaded({ kind: "loading" });
+    let result: LoadResult;
+    try {
+      const response = await fetch("/api/playlist-preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url, ...media }),
+        signal: controller.signal,
+      });
+      result = await response.json();
+    } catch {
+      result = controller.signal.aborted ? { kind: "cancelled" } : { kind: "none" };
+    }
+    if (loading.current !== controller) return;
+    loading.current = undefined;
+    if (result.kind === "preview") setLoaded({ kind: "preview", view: result.view });
+    else if (result.kind === "timedOut") setLoaded({ kind: "error", message: texts.playlist.timedOut, timedOut: true });
+    else if (result.kind === "none") setLoaded({ kind: "error", message: texts.addForm.noMedia });
+    else setLoaded({ kind: "closed" });
+  };
+
   return (
     // Mobil dreizeilig (Link, Optionen, „Add“), breit zweizeilig mit „Add“ neben dem Link.
+    <>
     <form
       action={formAction}
+      onSubmit={loadPreview}
       aria-label={texts.addForm.title}
       className="grid gap-2 rounded-lg border border-border bg-card p-3 shadow-elevation-1 sm:grid-cols-[1fr_auto] sm:gap-3 sm:p-4"
     >
@@ -76,6 +134,15 @@ export function AddForm() {
         />
       )}
     </form>
+    <PlaylistDialog
+      state={dialog}
+      onCancel={closeDialog}
+      onAdded={() => {
+        closeDialog();
+        if (input.current) input.current.value = "";
+      }}
+    />
+    </>
   );
 }
 
@@ -93,9 +160,7 @@ function DuplicateAlert({
   onCancel: () => void;
 }) {
   const { kind, title, position, ageMs } = duplicate;
-  const media = `${texts.media.row[duplicate.mediaType]} · ${
-    duplicate.resolution ? texts.media.resolutions[duplicate.resolution] : texts.media.row.mp3
-  }`;
+  const media = mediaLabel(duplicate);
   const sentence =
     kind === "downloaded"
       ? texts.duplicate.exists(title, media, formatAge(ageMs ?? 0))

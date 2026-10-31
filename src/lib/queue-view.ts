@@ -1,4 +1,5 @@
 import type { EntryState, QueueEntry } from "@/server/db/schema";
+import type { MediaType, Resolution } from "./media";
 import { texts } from "./texts";
 
 /** Was die Liste im Browser von einem Queue-Eintrag braucht. Zeitstempel formatiert der Browser. */
@@ -19,6 +20,7 @@ export type EntryView = Pick<
   | "totalBytesEstimate"
   | "errorCategory"
   | "fileSize"
+  | "playlistTitle"
 > & {
   /** Fertig, aber die Mediendatei fehlt auf der Platte. Kein eigener Zustand. */
   fileMissing: boolean;
@@ -114,4 +116,17 @@ export function formatAge(ms: number) {
     if (ms >= size) return format.format(-Math.floor(ms / size), unit);
   }
   return texts.time.justNow;
+}
+
+/** Dauer eines Mediums wie in Playern: „14:32“, ab einer Stunde „1:02:03“. */
+export function formatDuration(seconds: number) {
+  const total = Math.floor(seconds);
+  const [h, m, s] = [Math.floor(total / 3600), Math.floor((total % 3600) / 60), total % 60];
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+/** „Video · 720p“ bzw. „Audio · MP3“, etwa für die Duplikat-Warnung und den Kopf des Playlist-Dialogs. */
+export function mediaLabel({ mediaType, resolution }: { mediaType: MediaType; resolution: Resolution | null }) {
+  return `${texts.media.row[mediaType]} · ${resolution ? texts.media.resolutions[resolution] : texts.media.row.mp3}`;
 }

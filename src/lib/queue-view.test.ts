@@ -3,7 +3,9 @@ import type { EntryState } from "@/server/db/schema";
 import {
   countByFilter,
   formatAge,
+  formatDuration,
   formatSize,
+  mediaLabel,
   matchesFilter,
   progressFraction,
   queuePositions,
@@ -28,6 +30,7 @@ function entry(id: number, state: EntryState, queuedAt: number, finishedAt: numb
     totalBytesEstimate: null,
     errorCategory: null,
     fileSize: null,
+    playlistTitle: null,
     fileMissing: false,
   };
 }
@@ -135,5 +138,25 @@ describe("formatAge", () => {
     [400 * DAY, "last year"],
   ])("formats an age of %i ms as %s", (ms, text) => {
     expect(formatAge(ms)).toBe(text);
+  });
+});
+
+describe("formatDuration", () => {
+  it("shows minutes and seconds, from one hour on also hours", () => {
+    expect(formatDuration(5)).toBe("0:05");
+    expect(formatDuration(872)).toBe("14:32");
+    expect(formatDuration(3723)).toBe("1:02:03");
+  });
+
+  it("cuts off fractions of a second", () => {
+    expect(formatDuration(635.9)).toBe("10:35");
+  });
+});
+
+describe("mediaLabel", () => {
+  it("names media type and resolution, MP3 for audio", () => {
+    expect(mediaLabel({ mediaType: "video", resolution: "720" })).toBe("Video · 720p");
+    expect(mediaLabel({ mediaType: "video", resolution: "best" })).toBe("Video · Best");
+    expect(mediaLabel({ mediaType: "audio", resolution: null })).toBe("Audio · MP3");
   });
 });

@@ -7,6 +7,7 @@ import type { CheckResult, PlaylistEntry } from "./check/parse-check";
 import type { Db, Tx } from "./db/open";
 import { playlistPreviews } from "./db/schema";
 import { playlistFolder } from "./files/file-name";
+import { startIntervalFromEnv } from "./config/config";
 import { dataPaths } from "./paths";
 import { enqueue, findDuplicateEntry } from "./queue";
 
@@ -60,6 +61,7 @@ export async function openPreview(
   media: Media,
   playlist: Extract<CheckResult, { kind: "playlist" }>,
   now: number,
+  startIntervalSeconds = startIntervalFromEnv(process.env),
 ): Promise<PreviewView> {
   const { key, preview } = storePreview(db, media, playlist, now);
   const items = await Promise.all(
@@ -68,7 +70,7 @@ export async function openPreview(
       return { number, url, title, duration, thumbnailUrl, ...(duplicate && { duplicate: duplicate.kind }) };
     }),
   );
-  return { key, title: preview.title, media, items };
+  return { key, title: preview.title, media, startIntervalSeconds, items };
 }
 
 /**

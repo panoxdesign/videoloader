@@ -44,6 +44,14 @@ function value(env: Env, name: string) {
   return env[name] || undefined;
 }
 
+const DEFAULT_START_INTERVAL_SECONDS = 15;
+
+/** Für Request-Kontexte, etwa den Hinweis zur Mindestdauer. Geprüft hat `register` den Wert schon beim Start. */
+export function startIntervalFromEnv(env: Env) {
+  const raw = value(env, "START_INTERVAL_SECONDS");
+  return raw === undefined ? DEFAULT_START_INTERVAL_SECONDS : Number(raw);
+}
+
 export function resolveDataDir(env: Env) {
   const raw = value(env, "DATA_DIR") ?? DEFAULT_DATA_DIR;
   const normalized = posix.normalize(raw);
@@ -95,7 +103,7 @@ export function parseConfig(env: Env, facts: Facts): ConfigResult {
     "RETENTION_DAYS", 7, 0, Number.MAX_SAFE_INTEGER, "a whole number of days, 0 or more (0 = never delete)",
   );
   const startIntervalSeconds = integer(
-    "START_INTERVAL_SECONDS", 15, 0, 3600, "a whole number of seconds from 0 to 3600 (0 = off)",
+    "START_INTERVAL_SECONDS", DEFAULT_START_INTERVAL_SECONDS, 0, 3600, "a whole number of seconds from 0 to 3600 (0 = off)",
   );
   const ytdlpUpdate = oneOf("YTDLP_UPDATE", YTDLP_UPDATES, "off");
   const logLevel = oneOf("LOG_LEVEL", LOG_LEVELS, "info");

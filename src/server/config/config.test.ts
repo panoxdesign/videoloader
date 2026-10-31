@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeConfig, formatProblems, parseConfig, type Facts } from "./config";
+import { describeConfig, formatProblems, parseConfig, startIntervalFromEnv, type Facts } from "./config";
 
 const okFacts: Facts = { dataDir: "ok", mountPoints: ["/", "/data"], uid: 1000, gid: 1000 };
 const production = { NODE_ENV: "production" };
@@ -245,5 +245,13 @@ describe("describeConfig", () => {
     expect(line).toContain("RETENTION_DAYS=7");
     expect(line).not.toContain("\n");
     expect(describeConfig(configOf({}))).toContain("password: not set");
+  });
+});
+
+describe("startIntervalFromEnv", () => {
+  it("reads the start interval for request contexts like the start does", () => {
+    expect(startIntervalFromEnv({})).toBe(configOf({}).startIntervalSeconds);
+    expect(startIntervalFromEnv({ START_INTERVAL_SECONDS: "0" })).toBe(0);
+    expect(startIntervalFromEnv({ START_INTERVAL_SECONDS: "45" })).toBe(45);
   });
 });
