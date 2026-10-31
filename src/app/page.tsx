@@ -56,6 +56,7 @@ async function Queue() {
       totalBytesEstimate: entry.totalBytesEstimate,
       errorCategory: entry.errorCategory,
       fileSize: entry.fileSize,
+      playlistTitle: entry.playlistTitle,
       fileMissing: entry.state === "done" && !(await findMediaFile(downloads, entry)),
     })),
   );

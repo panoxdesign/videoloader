@@ -14,25 +14,49 @@ export function extensionOf(mediaType: MediaType) {
 }
 
 /**
- * `<Titel> [<Medien-ID>]`, ab `n = 2` mit Suffix ` (n)`, ohne Endung. Titel und ID kommen schon
- * bereinigt von yt-dlp. Ein zu langer Titel wird gekürzt, nie der Suffix.
+ * Ordnername einer Playlist: ihr Name, wie yt-dlp ihn bereinigt. Ohne Namen `Playlist [<ID>]`,
+ * analog zu `Queue entry [<id>]`, ohne beides nur `Playlist`. Höchstens `MAX_NAME_BYTES` lang:
+ * Ein zu langer Name wird wie ein Titel an Graphem-Grenzen gekürzt, die ID nie.
  */
-export function baseName(title: string, mediaId: string, n = 1) {
-  const id = `[${truncateUtf8(mediaId, MAX_ID_BYTES)}]`;
-  const suffix = n > 1 ? ` (${n})` : "";
-  const budget = MAX_NAME_BYTES - byteLength(id) - byteLength(suffix) - 1;
-  const short = truncateUtf8(title, Math.max(0, budget));
-  const head = short === title ? title : short.trimEnd();
-  return `${head ? `${head} ` : ""}${id}${suffix}`;
+export function playlistFolder({ fileTitle, fileId }: { fileTitle: string | null; fileId: string | null }) {
+  const short = fileTitle ? truncateUtf8(fileTitle, MAX_NAME_BYTES) : "";
+  const name = short === fileTitle ? short : short.trimEnd();
+  if (name) return name;
+  const withId = fileId ? `Playlist [${fileId}]` : "";
+  // Die ID ist beim generischen Extraktor (RSS) die bereinigte Feed-URL und kann lang sein. Eine
+  // halbe ID taugt nicht zum Wiederfinden, also heißt der Ordner dann nur `Playlist`.
+  return withId && byteLength(withId) <= MAX_NAME_BYTES ? withId : "Playlist";
 }
 
-/** Der erste freie Name mit Endung, wie ein Dateimanager: ohne Suffix, dann ` (2)`, ` (3)` usw. */
+/** Ordner und Nummer eines Playlist-Eintrags. Der Ordner kommt fertig aus `playlistFolder`. */
+export type PlaylistPlace = { folder: string; number: number };
+
+/**
+ * `<Titel> [<Medien-ID>]`, ab `n = 2` mit Suffix ` (n)`, ohne Endung. Titel und ID kommen schon
+ * bereinigt von yt-dlp. Ein zu langer Titel wird gekürzt, nie der Suffix. `prefix` steht vor
+ * dem Titel und zählt zur Länge, etwa die Nummer eines Playlist-Eintrags.
+ */
+export function baseName(title: string, mediaId: string, n = 1, prefix = "") {
+  const id = `[${truncateUtf8(mediaId, MAX_ID_BYTES)}]`;
+  const suffix = n > 1 ? ` (${n})` : "";
+  const budget = MAX_NAME_BYTES - byteLength(prefix) - byteLength(id) - byteLength(suffix) - 1;
+  const short = truncateUtf8(title, Math.max(0, budget));
+  const head = short === title ? title : short.trimEnd();
+  return `${prefix}${head ? `${head} ` : ""}${id}${suffix}`;
+}
+
+/**
+ * Der erste freie Name mit Endung, wie ein Dateimanager: ohne Suffix, dann ` (2)`, ` (3)` usw.
+ * Ein Playlist-Eintrag heißt `<Ordner>/<Nr> - <Titel> [<Medien-ID>]`, die Nummer mindestens dreistellig.
+ */
 export function chooseFileName(
-  { title, mediaId, ext }: { title: string; mediaId: string; ext: string },
+  { title, mediaId, ext, playlist }: { title: string; mediaId: string; ext: string; playlist?: PlaylistPlace },
   isTaken: (fileName: string) => boolean,
 ) {
+  const folder = playlist ? `${playlist.folder}/` : "";
+  const prefix = playlist ? `${String(playlist.number).padStart(3, "0")} - ` : "";
   for (let n = 1; n < MAX_SUFFIX; n++) {
-    const fileName = `${baseName(title, mediaId, n)}.${ext}`;
+    const fileName = `${folder}${baseName(title, mediaId, n, prefix)}.${ext}`;
     if (!isTaken(fileName)) return fileName;
   }
   throw new Error(`no free file name for ${title} [${mediaId}]`);

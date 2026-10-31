@@ -22,7 +22,17 @@ const PAGES: Record<string, { title: string }> = {
   "dup-clip": { title: "Dup Clip" },
   // `%` im Output-Template wäre ein Feld, wenn die App es nicht maskiert.
   "percent-clip": { title: "100% sure: 50%% off %(id)s" },
+  // Für den RSS-Feed, damit der Playlist-Ablauf im E2E kein Medium mit anderen Tests teilt.
+  "mix-one": { title: "Mix One" },
+  "mix-two": { title: "Mix Two" },
+  "mix-three": { title: "Mix Three" },
 };
+
+/**
+ * RSS-Feed als Playlist. yt-dlp liefert die Einträge flach, ohne ID, Dauer und Vorschaubild.
+ * Der Titel enthält `:`, das `--windows-filenames` für den Ordnernamen ersetzt.
+ */
+const FEED = { title: "Clips: The Mix", pages: ["mix-one", "mix-two", "mix-three"] };
 
 export type FixtureServer = { url: string; close(): Promise<void> };
 
@@ -59,6 +69,28 @@ export async function startFixtureServer(options: {
   </head>
   <body></body>
 </html>`);
+      return;
+    }
+
+    if (url.pathname === "/feed.rss") {
+      // `?delay=<ms>` hält die Antwort zurück, für Abbruch und Timeout der Vorschau.
+      const delay = Number(url.searchParams.get("delay")) || 0;
+      const items = FEED.pages.map(
+        (page) => `<item><title>${escapeHtml(PAGES[page].title)}</title><link>${origin}/videos/${page}</link></item>`,
+      );
+      const feed = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>${escapeHtml(FEED.title)}</title>
+    <link>${origin}/</link>
+    ${items.join("\n    ")}
+  </channel>
+</rss>`;
+      const timer = setTimeout(() => {
+        res.setHeader("content-type", "application/rss+xml; charset=utf-8");
+        res.end(feed);
+      }, delay);
+      res.on("close", () => clearTimeout(timer));
       return;
     }
 

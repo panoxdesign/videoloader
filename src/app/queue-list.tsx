@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "cn";
-import { DownloadIcon, Trash2Icon } from "lucide-react";
+import { DownloadIcon, ListVideoIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -147,6 +147,16 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
                 <span className="tabular-nums"> · {formatSize(entry.fileSize)}</span>
               )}
             </span>
+          )}
+          {entry.playlistTitle && (
+            <>
+              <Dot />
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <ListVideoIcon aria-hidden strokeWidth={1.75} className="size-3.5 flex-none" />
+                <span className="sr-only">{texts.queue.fromPlaylist} </span>
+                <span className="[overflow-wrap:anywhere]">{entry.playlistTitle}</span>
+              </span>
+            </>
           )}
           {position !== undefined && (
             <>

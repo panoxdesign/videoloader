@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 import { parseCheck } from "./parse-check";
 
 const json = (value: unknown) => JSON.stringify(value);
-/** Die Zeile aus `--print` vor dem JSON, mit ID und Titel wie für Dateinamen bereinigt. */
-const fileLine = (id: string, title: string) => `FILE\t${id}\t${title}\n`;
+/** Die Zeile aus `--print` vor dem JSON: `url` als JSON, ID und Titel wie für Dateinamen bereinigt. */
+const fileLine = (url: string, id: string, title: string) => `FILE\t${JSON.stringify(url)}\t${id}\t${title}\n`;
+/** Die Zeile aus `--print playlist:…` mit Playlist-ID und -Namen, bereinigt für den Ordner. */
+const playlistLine = (id: string, title: string) => `PLAYLIST\t${id}\t${title}\n`;
 
 describe("parseCheck", () => {
   it("reads a single video", () => {
     // Auszug aus der Prüfung gegen die Fixture-Seite `clip-one`.
-    const stdout = fileLine("clip-one", "Clip One") + json({
+    const stdout = fileLine("http://fixtures:8080/media/clip-one.mp4", "clip-one", "Clip One") + json({
       id: "clip-one",
       title: "Clip One",
       url: "http://fixtures:8080/media/clip-one.mp4",
@@ -36,7 +38,7 @@ describe("parseCheck", () => {
 
   it("takes title and media id for the file name from the print line, as yt-dlp cleaned them", () => {
     const stdout =
-      fileLine("umlaut-clip", "Grüße aus Köln⧸Zürich： Café？") +
+      fileLine("http://fixtures:8080/media/umlaut.mp4", "umlaut-clip", "Grüße aus Köln⧸Zürich： Café？") +
       json({ _type: "video", extractor_key: "Generic", id: "umlaut-clip", title: "Grüße aus Köln/Zürich: Café?" });
     expect(parseCheck(stdout)).toMatchObject({
       kind: "video",
@@ -46,7 +48,7 @@ describe("parseCheck", () => {
 
   it("keeps percent signs in the file title as they are", () => {
     // yt-dlp entfernt Tabs und Zeilenumbrüche aus `%(title)S`, deshalb trennt der Tab sicher.
-    const stdout = fileLine("p", "100% sure： 50%% off %(id)s") + json({ _type: "video", extractor_key: "Generic", id: "p" });
+    const stdout = fileLine("http://fixtures:8080/media/p.mp4", "p", "100% sure： 50%% off %(id)s") + json({ _type: "video", extractor_key: "Generic", id: "p" });
     expect(parseCheck(stdout)).toMatchObject({ kind: "video", media: { fileTitle: "100% sure： 50%% off %(id)s", fileMediaId: "p" } });
   });
 
@@ -78,7 +80,7 @@ describe("parseCheck", () => {
   });
 
   it("reads a playlist with flat entries", () => {
-    const stdout = json({
+    const stdout = fileLine("https://www.youtube.com/watch?v=abc", "abc", "How Rockets Land Themselves") + playlistLine("PL123", "Space Engineering Explained") + json({
       _type: "playlist",
       extractor_key: "YoutubeTab",
       id: "PL123",
@@ -99,6 +101,8 @@ describe("parseCheck", () => {
     expect(parseCheck(stdout)).toEqual({
       kind: "playlist",
       title: "Space Engineering Explained",
+      fileTitle: "Space Engineering Explained",
+      fileId: "PL123",
       entries: [
         {
           url: "https://www.youtube.com/watch?v=abc",
@@ -107,6 +111,8 @@ describe("parseCheck", () => {
           title: "How Rockets Land Themselves",
           thumbnailUrl: "https://i.ytimg.com/vi/abc/hqdefault.jpg",
           duration: 312,
+          fileTitle: "How Rockets Land Themselves",
+          fileMediaId: "abc",
         },
       ],
     });
@@ -131,6 +137,91 @@ describe("parseCheck", () => {
         { url: "http://fixtures:8080/videos/clip-one", source: "Generic", mediaId: null, title: "Clip One", thumbnailUrl: null, duration: null },
         { url: "http://fixtures:8080/videos/clip-two", source: "Generic", mediaId: null, title: null, thumbnailUrl: null, duration: null },
       ],
+    });
+  });
+
+  it("takes the folder name and the file names of the entries from the print lines, in playlist order", () => {
+    // Auszug aus der Prüfung gegen einen RSS-Feed: je Flat-Eintrag eine `FILE`-Zeile, danach der Playlist-Name.
+    const stdout =
+      fileLine("http://fixtures:8080/videos/clip-one", "", "Clip One") +
+      fileLine("http://fixtures:8080/videos/clip-two", "", "Clip⧸Two？") +
+      playlistLine("http：⧸⧸fixtures：8080⧸feed.rss", "Fixture Feed： Clips⧸Mix？") +
+      json({
+        _type: "playlist",
+        extractor_key: "Generic",
+        title: "Fixture Feed: Clips/Mix?",
+        entries: [
+          { _type: "url", url: "http://fixtures:8080/videos/clip-one", title: "Clip One" },
+          { _type: "url", url: "http://fixtures:8080/videos/clip-two", title: "Clip/Two?" },
+        ],
+      });
+
+    expect(parseCheck(stdout)).toMatchObject({
+      kind: "playlist",
+      title: "Fixture Feed: Clips/Mix?",
+      fileTitle: "Fixture Feed： Clips⧸Mix？",
+      fileId: "http：⧸⧸fixtures：8080⧸feed.rss",
+      entries: [
+        { url: "http://fixtures:8080/videos/clip-one", fileTitle: "Clip One", fileMediaId: null },
+        { url: "http://fixtures:8080/videos/clip-two", fileTitle: "Clip⧸Two？", fileMediaId: null },
+      ],
+    });
+  });
+
+  describe("matching print lines to flat entries", () => {
+    const yt = (id: string) => `https://www.youtube.com/watch?v=${id}`;
+    const playlist = (...ids: string[]) =>
+      json({
+        _type: "playlist",
+        extractor_key: "YoutubeTab",
+        entries: ids.map((id) => ({ _type: "url", ie_key: "Youtube", id, url: yt(id), title: `Title ${id}` })),
+      });
+
+    it("leaves an entry without a print line unnamed instead of shifting the following ones", () => {
+      const stdout = fileLine(yt("a"), "a", "A") + fileLine(yt("c"), "c", "C") + playlist("a", "b", "c");
+      expect(parseCheck(stdout)).toMatchObject({
+        kind: "playlist",
+        entries: [
+          { mediaId: "a", fileMediaId: "a", fileTitle: "A" },
+          { mediaId: "b", fileMediaId: null, fileTitle: null },
+          { mediaId: "c", fileMediaId: "c", fileTitle: "C" },
+        ],
+      });
+    });
+
+    it("ignores a print line without an entry", () => {
+      const stdout = fileLine(yt("a"), "a", "A") + fileLine(yt("x"), "x", "X") + fileLine(yt("b"), "b", "B") + playlist("a", "b");
+      expect(parseCheck(stdout)).toMatchObject({
+        kind: "playlist",
+        entries: [
+          { mediaId: "a", fileMediaId: "a", fileTitle: "A" },
+          { mediaId: "b", fileMediaId: "b", fileTitle: "B" },
+        ],
+      });
+    });
+
+    it("gives entries with the same url their print lines in order", () => {
+      // Ein Feed darf denselben Link zweimal führen, mit eigenem Titel je Eintrag.
+      const stdout =
+        fileLine("http://fixtures:8080/videos/clip-one", "", "First") +
+        fileLine("http://fixtures:8080/videos/clip-one", "", "Second") +
+        json({
+          _type: "playlist",
+          extractor_key: "Generic",
+          entries: [
+            { _type: "url", url: "http://fixtures:8080/videos/clip-one", title: "First" },
+            { _type: "url", url: "http://fixtures:8080/videos/clip-one", title: "Second" },
+          ],
+        });
+      expect(parseCheck(stdout)).toMatchObject({
+        kind: "playlist",
+        entries: [{ fileTitle: "First" }, { fileTitle: "Second" }],
+      });
+    });
+
+    it("names no entry from a print line whose url is not JSON", () => {
+      const stdout = `FILE\ta\tA\n` + playlist("a");
+      expect(parseCheck(stdout)).toMatchObject({ kind: "playlist", entries: [{ mediaId: "a", fileMediaId: null, fileTitle: null }] });
     });
   });
 

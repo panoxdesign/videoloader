@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 import * as schema from "./schema";
 
 export type Db = ReturnType<typeof openDb>;
+/** Eine laufende Transaktion, sie kann alles, was `Db` für Abfragen kann. */
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export function openDb(file: string) {
   mkdirSync(dirname(file), { recursive: true });

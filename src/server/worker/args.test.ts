@@ -64,8 +64,14 @@ describe("buildCheckArgs", () => {
     expect(args).toContain("--no-playlist");
   });
 
-  it("prints media id and title cleaned for file names before the JSON", () => {
-    expect(valuesOf(args, "--print")).toEqual(["FILE\t%(id)S\t%(title)S"]);
+  it("prints url, media id and title cleaned for file names before the JSON, empty instead of NA when missing", () => {
+    // Die `url` steht als JSON in der Zeile, `parseCheck` ordnet die Zeile darüber dem Flat-Eintrag zu.
+    expect(valuesOf(args, "--print")).toContain("FILE\t%(url|)j\t%(id|)S\t%(title|)S");
+    expect(args).toContain("--windows-filenames");
+  });
+
+  it("prints playlist id and name cleaned for the folder, once per playlist", () => {
+    expect(valuesOf(args, "--print")).toContain("playlist:PLAYLIST\t%(id|)S\t%(title|)S");
     expect(args).toContain("--windows-filenames");
   });
 

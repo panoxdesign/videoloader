@@ -5,7 +5,8 @@ import { mkdir, rm, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { createInterface } from "node:readline";
 import { parseMedia } from "@/lib/media";
-import type { Db } from "../db/open";
+import { CHECK_TIMEOUT_MS, checkLink } from "../check/check";
+import type { Db, Tx } from "../db/open";
 import { NAME_HOLDING_STATES, queueEntries, type QueueEntry } from "../db/schema";
 import { chooseFileName, extensionOf, nameKey } from "../files/file-name";
 import { isInside } from "../files/inside";
@@ -70,12 +71,12 @@ export function startWorker(deps: WorkerDeps): Worker {
   };
 }
 
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /**
  * Setzt den ältesten wartenden Eintrag in einer Transaktion auf läuft und reserviert dabei
  * seinen Dateinamen. So bekommen auch mehrere Slots nie denselben Namen. Scheitert die
  * Reservierung, schlägt nur dieser Eintrag fehl und der nächste wartende kommt dran.
+ * Einem Playlist-Eintrag ohne Medien-ID oder Titel reserviert erst der Slot den Namen, nach der Prüfung.
  */
 function claimNext({ db, dataDir, clock, log }: WorkerDeps): QueueEntry | undefined {
   const downloadsDir = dataPaths(dataDir).downloads;
@@ -89,6 +90,14 @@ function claimNext({ db, dataDir, clock, log }: WorkerDeps): QueueEntry | undefi
         .limit(1)
         .get();
       if (!next) return undefined;
+      if (needsNaming(next)) {
+        return tx
+          .update(queueEntries)
+          .set({ state: "running", phase: "download", fileName: null })
+          .where(and(eq(queueEntries.id, next.id), eq(queueEntries.state, "waiting")))
+          .returning()
+          .get();
+      }
       try {
         return tx
           .update(queueEntries)
@@ -134,10 +143,50 @@ function reserveFileName(tx: Tx, downloadsDir: string, entry: QueueEntry) {
     entry.fileTitle && entry.fileMediaId
       ? { title: entry.fileTitle, mediaId: entry.fileMediaId }
       : { title: "Queue entry", mediaId: String(entry.id) };
-  return chooseFileName({ ...name, ext: extensionOf(entry.mediaType) }, isTaken);
+  const playlist =
+    entry.playlistFolder && entry.playlistNumber !== null
+      ? { folder: entry.playlistFolder, number: entry.playlistNumber }
+      : undefined;
+  return chooseFileName({ ...name, ext: extensionOf(entry.mediaType), playlist }, isTaken);
 }
 
-async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry: QueueEntry) {
+/** Flat-Einträge einer Playlist kennen Medien-ID und Titel je nach Quelle nicht. */
+function needsNaming(entry: QueueEntry) {
+  return entry.playlistFolder !== null && (!entry.fileMediaId || !entry.fileTitle);
+}
+
+/**
+ * Prüft den Link eines Playlist-Eintrags wie „Add“, übernimmt Quelle, Medien-ID, Titel und
+ * Dateinamen-Teile und reserviert dann den Namen. Scheitert die Prüfung, wirft es.
+ */
+async function completeNaming({ db, ytDlpPath, dataDir }: WorkerDeps, entry: QueueEntry) {
+  const paths = dataPaths(dataDir);
+  const result = await checkLink({
+    ytDlpPath,
+    url: entry.url,
+    cacheDir: paths.cache,
+    signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+  });
+  if (result.kind !== "video") throw new Error(`check before start found ${result.kind === "none" ? "nothing" : "a playlist"}`);
+  const { media } = result;
+  return db.transaction((tx) => {
+    const checked = {
+      source: media.source ?? entry.source,
+      mediaId: media.mediaId ?? entry.mediaId,
+      title: entry.title ?? media.title,
+      thumbnailUrl: entry.thumbnailUrl ?? media.thumbnailUrl,
+      duration: entry.duration ?? media.duration,
+      fileTitle: media.fileTitle ?? entry.fileTitle,
+      fileMediaId: media.fileMediaId ?? entry.fileMediaId,
+    };
+    const fileName = reserveFileName(tx, paths.downloads, { ...entry, ...checked });
+    return tx.update(queueEntries).set({ ...checked, fileName }).where(eq(queueEntries.id, entry.id)).returning().get();
+  });
+}
+
+async function runSlot(deps: WorkerDeps, claimed: QueueEntry) {
+  const { db, ytDlpPath, dataDir, clock, log } = deps;
+  let entry = claimed;
   const paths = dataPaths(dataDir);
   const tmpDir = join(paths.tmp, String(entry.id));
   const update = (values: Partial<QueueEntry>) =>
@@ -149,6 +198,7 @@ async function runSlot({ db, ytDlpPath, dataDir, clock, log }: WorkerDeps, entry
     await mkdir(tmpDir, { recursive: true });
     await mkdir(paths.downloads, { recursive: true });
 
+    if (!entry.fileName) entry = await completeNaming(deps, entry);
     const media = parseMedia(entry);
     if (!media) throw new Error(`invalid media type ${entry.mediaType} / ${entry.resolution}`);
     if (!entry.fileName) throw new Error("no reserved file name");

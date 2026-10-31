@@ -27,6 +27,13 @@ export const queueEntries = sqliteTable(
     /** Titel und Medien-ID, wie yt-dlp sie für Dateinamen bereinigt. Aus der Prüfung. */
     fileTitle: text(),
     fileMediaId: text(),
+    // Nur bei Einträgen aus einer Playlist, aus dem Zwischenspeicher der Vorschau.
+    /** Playlist-Name für die Listenzeile. */
+    playlistTitle: text(),
+    /** Ordner unter `downloads/`, bereinigt. */
+    playlistFolder: text(),
+    /** Nummer in der Playlist laut Vorschau, ab 1. */
+    playlistNumber: integer(),
     mediaType: text({ enum: MEDIA_TYPES }).notNull(),
     resolution: text({ enum: RESOLUTIONS }),
     state: text({ enum: ENTRY_STATES }).notNull(),
@@ -75,3 +82,15 @@ export const queueEntries = sqliteTable(
 );
 
 export type QueueEntry = typeof queueEntries.$inferSelect;
+
+/**
+ * Zwischenspeicher der Playlist-Vorschau, bis „Add x to queue“ einreiht. Der Browser kennt nur
+ * den Schlüssel, Titel, Medien-IDs und Dateinamen kommen nie aus dem Browser. Eine Zeile gilt
+ * etwa 15 min und wird beim Einreihen gelöscht.
+ */
+export const playlistPreviews = sqliteTable("playlist_previews", {
+  key: text().primaryKey(),
+  expiresAt: integer().notNull(),
+  /** Die Vorschau als JSON, sie wird nur als Ganzes geschrieben und gelesen. */
+  data: text({ mode: "json" }).notNull(),
+});
