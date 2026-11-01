@@ -57,7 +57,8 @@ export function AddForm() {
     void loadPreview(url, media);
   };
 
-  const loadPreview = async (url: string, media: Media) => {
+  // `noneMessage`: Bei „Load whole playlist“ ist das Video schon eingereiht, „No downloadable media“ wäre falsch.
+  const loadPreview = async (url: string, media: Media, noneMessage: string = texts.addForm.noMedia) => {
     const controller = new AbortController();
     loading.current = controller;
     setDismissed(state);
@@ -81,12 +82,12 @@ export function AddForm() {
     if (!result) setLoaded({ kind: "error", message: texts.playlist.failed });
     else if (result.kind === "preview") setLoaded({ kind: "preview", view: result.view });
     else if (result.kind === "timedOut") setLoaded({ kind: "error", message: texts.playlist.timedOut, timedOut: true });
-    else if (result.kind === "none") setLoaded({ kind: "error", message: texts.addForm.noMedia });
+    else if (result.kind === "none") setLoaded({ kind: "error", message: noneMessage });
     else setLoaded({ kind: "closed" });
   };
 
   const loadPlaylist = () => {
-    if (mixed) void loadPreview(mixed.link, mixed.media);
+    if (mixed) void loadPreview(mixed.link, mixed.media, texts.playlist.failed);
   };
 
   return (
