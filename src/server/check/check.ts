@@ -9,13 +9,13 @@ import { parseCheck, type CheckResult } from "./parse-check";
  */
 export const CHECK_TIMEOUT_MS = 120_000;
 
-export type CheckInput = { ytDlpPath: string; url: string; cacheDir: string; signal: AbortSignal };
+export type CheckInput = { ytDlpPath: string; url: string; cacheDir: string; signal: AbortSignal; playlist?: boolean };
 
 /** Prüft einen Link mit yt-dlp, ohne etwas herunterzuladen. Feuert `signal`, wird die Prozessgruppe beendet. */
-export async function checkLink({ ytDlpPath, url, cacheDir, signal }: CheckInput): Promise<CheckResult> {
+export async function checkLink({ ytDlpPath, url, cacheDir, signal, playlist }: CheckInput): Promise<CheckResult> {
   if (signal.aborted) return { kind: "none", timedOut: true };
 
-  const child = spawn(ytDlpPath, buildCheckArgs({ url, cacheDir }), { detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(ytDlpPath, buildCheckArgs({ url, cacheDir, playlist }), { detached: true, stdio: ["ignore", "pipe", "pipe"] });
   const kill = () => {
     try {
       if (child.pid) process.kill(-child.pid, "SIGKILL");

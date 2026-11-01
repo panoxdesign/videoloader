@@ -107,7 +107,8 @@ export type LoadResult =
 
 /**
  * Lädt die Vorschau eines Playlist-Links für den Route Handler. `signal` feuert, wenn der Browser
- * abbricht. Dann oder nach `timeoutMs` wird yt-dlp beendet.
+ * abbricht. Dann oder nach `timeoutMs` wird yt-dlp beendet. Mit `--yes-playlist`, damit auch ein
+ * Video in einer Playlist die ganze Playlist liefert („Load whole playlist“).
  */
 export async function loadPreview({
   db,
@@ -130,7 +131,13 @@ export async function loadPreview({
 }): Promise<LoadResult> {
   const paths = dataPaths(dataDir);
   const timeout = AbortSignal.timeout(timeoutMs);
-  const result = await checkLink({ ytDlpPath, url, cacheDir: paths.cache, signal: AbortSignal.any([signal, timeout]) });
+  const result = await checkLink({
+    ytDlpPath,
+    url,
+    cacheDir: paths.cache,
+    signal: AbortSignal.any([signal, timeout]),
+    playlist: true,
+  });
   if (signal.aborted) return { kind: "cancelled" };
   if (timeout.aborted) return { kind: "timedOut" };
   if (result.kind === "none" && result.error) return { kind: "none", error: result.error };

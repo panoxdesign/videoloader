@@ -4,7 +4,7 @@ import { LoaderCircleIcon, TriangleAlertIcon } from "lucide-react";
 import { useActionState, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { parseMedia } from "@/lib/media";
+import { parseMedia, type Media } from "@/lib/media";
 import { isPlaylistLink } from "@/lib/playlist-link";
 import { formatAge, mediaLabel } from "@/lib/queue-view";
 import { texts } from "@/lib/texts";
@@ -19,13 +19,15 @@ import { PlaylistDialog, type PlaylistDialogState } from "./playlist-dialog";
  *
  * „Add“ wählt den Weg am Link (ADR 0002): Ein erkannter Playlist-Link lädt die Vorschau über den
  * Route Handler, abbrechbar mit „Cancel“. Alles andere prüft die Server Action. Liefert sie doch
- * eine Playlist, öffnet sich der Dialog direkt mit ihrem Ergebnis.
+ * eine Playlist, öffnet sich der Dialog direkt mit ihrem Ergebnis. Bei einem Video in einer
+ * Playlist lädt „Load whole playlist“ die Playlist über denselben Route Handler (Ticket 27).
  */
 export function AddForm() {
   const [state, formAction, pending] = useActionState(addEntry, {});
   // „Cancel“ und jede Änderung am Link blenden die Warnung aus, bis die nächste Antwort kommt.
   const [dismissed, setDismissed] = useState<AddState>();
   const duplicate = state === dismissed ? undefined : state.duplicate;
+  const mixed = state === dismissed ? undefined : state.mixed;
   const input = useRef<HTMLInputElement>(null);
 
   // Der Dialog aus dem Route Handler. Sonst zeigt er die Vorschau, die `addEntry` geliefert hat.
@@ -45,13 +47,16 @@ export function AddForm() {
     setDismissed(state);
   };
 
-  const loadPreview = async (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     const data = new FormData(event.currentTarget);
     const url = String(data.get("url") ?? "").trim();
     const media = parseMedia({ mediaType: data.get("mediaType"), resolution: data.get("resolution") });
     if (!isPlaylistLink(url) || !media) return;
     event.preventDefault();
+    void loadPreview(url, media);
+  };
 
+  const loadPreview = async (url: string, media: Media) => {
     const controller = new AbortController();
     loading.current = controller;
     setDismissed(state);
@@ -84,7 +89,7 @@ export function AddForm() {
     <>
     <form
       action={formAction}
-      onSubmit={loadPreview}
+      onSubmit={submit}
       aria-label={texts.addForm.title}
       className="grid gap-2 rounded-lg border border-border bg-card p-3 shadow-elevation-1 sm:grid-cols-[1fr_auto] sm:gap-3 sm:p-4"
     >
@@ -125,10 +130,19 @@ export function AddForm() {
           {state.notice}
         </p>
       )}
+      {mixed?.added && (
+        <MixedHint
+          title={mixed.added}
+          pending={pending}
+          onLoad={() => loadPreview(mixed.link, mixed.media)}
+          onDismiss={() => setDismissed(state)}
+        />
+      )}
       {duplicate && (
         <DuplicateAlert
           duplicate={duplicate}
           pending={pending}
+          onLoadPlaylist={mixed && (() => loadPreview(mixed.link, mixed.media))}
           onCancel={() => {
             setDismissed(state);
             if (input.current) input.current.value = "";
@@ -156,10 +170,13 @@ export function AddForm() {
 function DuplicateAlert({
   duplicate,
   pending,
+  onLoadPlaylist,
   onCancel,
 }: {
   duplicate: DuplicateWarning;
   pending: boolean;
+  /** Nur bei einem Video in einer Playlist: Wer das Video schon hat, kommt so an die Playlist. */
+  onLoadPlaylist?: () => void;
   onCancel: () => void;
 }) {
   const { kind, title, position, ageMs } = duplicate;
@@ -183,6 +200,11 @@ function DuplicateAlert({
           <Button type="submit" name="addAnyway" value={duplicate.key} disabled={pending}>
             {texts.duplicate.addAnyway}
           </Button>
+          {onLoadPlaylist && (
+            <Button type="button" variant="quiet" disabled={pending} onClick={onLoadPlaylist}>
+              {texts.mixed.loadPlaylist}
+            </Button>
+          )}
           <Button type="button" variant="quiet" disabled={pending} onClick={onCancel}>
             {texts.duplicate.cancel}
           </Button>
@@ -195,6 +217,33 @@ function DuplicateAlert({
             </a>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Hinweis nach dem Einreihen eines Videos aus einem gemischten Link. */
+function MixedHint({
+  title,
+  pending,
+  onLoad,
+  onDismiss,
+}: {
+  title: string;
+  pending: boolean;
+  onLoad: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div role="status" className="flex flex-col gap-3 rounded-md bg-muted px-4 py-3.5 text-sm text-foreground sm:col-span-2">
+      <p className="[overflow-wrap:anywhere]">{texts.mixed.added(title)}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" disabled={pending} onClick={onLoad}>
+          {texts.mixed.loadPlaylist}
+        </Button>
+        <Button type="button" variant="ghost" disabled={pending} onClick={onDismiss}>
+          {texts.mixed.dismiss}
+        </Button>
       </div>
     </div>
   );

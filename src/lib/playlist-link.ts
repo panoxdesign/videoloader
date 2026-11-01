@@ -10,6 +10,21 @@ export function isPlaylistLink(link: string) {
   return pathname === "/playlist" || (pathname === "/watch" && !searchParams.has("v"));
 }
 
+/**
+ * Reine Link-Erkennung: Trägt der Link ein Video und dazu eine Playlist? Dann reiht „Add“ das
+ * Video ein und bietet danach „Load whole playlist“ an. Mixe (`list=RD…`) zählen nicht: yt-dlp
+ * liefert sie bei jedem Aufruf anders, mit Wiederholungen und Hunderten Einträgen (Ticket 27).
+ * Andere Quellen erkennt die Funktion in V1 nicht.
+ */
+export function isMixedLink(link: string) {
+  const url = URL.parse(link);
+  if (!url) return false;
+  const list = url.searchParams.get("list");
+  if (!list || list.startsWith("RD")) return false;
+  if (url.hostname === "youtu.be") return url.pathname.length > 1;
+  return isYouTube(url.hostname) && url.pathname === "/watch" && !!url.searchParams.get("v");
+}
+
 function isYouTube(host: string) {
   return host === "youtube.com" || host.endsWith(".youtube.com");
 }

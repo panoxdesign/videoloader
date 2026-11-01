@@ -36,18 +36,19 @@ export function buildDownloadArgs({ url, media, fileName, downloadsDir, tmpDir, 
   ];
 }
 
-export type CheckArgsInput = { url: string; cacheDir: string };
+/** `playlist` lädt bei einem Video in einer Playlist die ganze Playlist („Load whole playlist“). */
+export type CheckArgsInput = { url: string; cacheDir: string; playlist?: boolean };
 
 /**
  * Argumente für die Prüfung bei „Add“: ein JSON-Objekt, bei Playlists mit Flat-Einträgen.
  * Davor steht je Medium eine Zeile mit Medien-ID und Titel, so bereinigt, wie yt-dlp sie in
  * Dateinamen schreibt. Daraus bildet die App den Namen der Mediendatei.
  */
-export function buildCheckArgs({ url, cacheDir }: CheckArgsInput): string[] {
+export function buildCheckArgs({ url, cacheDir, playlist = false }: CheckArgsInput): string[] {
   return [
     "-J",
     "--flat-playlist",
-    "--no-playlist",
+    playlist ? "--yes-playlist" : "--no-playlist",
     "--windows-filenames",
     // `|` setzt fehlende Felder leer statt „NA“. Die `url` steht auch im Flat-Eintrag des JSON
     // und verbindet beide, `j` maskiert Tabs darin.

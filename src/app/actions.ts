@@ -1,7 +1,8 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { parseMedia, type MediaType, type Resolution } from "@/lib/media";
+import { parseMedia, type Media, type MediaType, type Resolution } from "@/lib/media";
+import { isMixedLink } from "@/lib/playlist-link";
 import type { PreviewView } from "@/lib/playlist-selection";
 import { texts } from "@/lib/texts";
 import { CHECK_TIMEOUT_MS, checkLink } from "@/server/check/check";
@@ -33,7 +34,21 @@ export type DuplicateWarning = {
  * Rückgabe an das Formular. `url` füllt das Feld nach einer Meldung wieder, damit man den Link korrigieren kann.
  * `preview` öffnet den Playlist-Dialog, wenn ein nicht erkannter Link doch eine Playlist war (Variante B).
  */
-export type AddState = { url?: string; error?: string; notice?: string; duplicate?: DuplicateWarning; preview?: PreviewView };
+export type AddState = {
+  url?: string;
+  error?: string;
+  notice?: string;
+  duplicate?: DuplicateWarning;
+  preview?: PreviewView;
+  mixed?: MixedLink;
+};
+
+/**
+ * Ein Video in einer Playlist (Ticket 27). `link` und `media` laden mit „Load whole playlist“ die
+ * Playlist, in derselben Medienart, damit das Video dort als Duplikat markiert ist. `added` ist der
+ * Titel des eingereihten Videos und fehlt neben der Duplikat-Warnung.
+ */
+export type MixedLink = { link: string; media: Media; added?: string };
 
 /**
  * Prüft den Link mit yt-dlp und reiht ein Einzelvideo ein. Ein Duplikat ergibt erst eine Warnung.
@@ -67,6 +82,7 @@ export async function addEntry(_previous: AddState, formData: FormData): Promise
       const { kind, entry } = duplicate;
       return {
         url,
+        mixed: isMixedLink(url) ? { link: url, media } : undefined,
         duplicate: {
           key,
           kind,
@@ -84,7 +100,7 @@ export async function addEntry(_previous: AddState, formData: FormData): Promise
 
   enqueue(db, url, media, Date.now(), result.media);
   refresh();
-  return {};
+  return isMixedLink(url) ? { mixed: { link: url, media, added: result.media.title ?? url } } : {};
 }
 
 /**

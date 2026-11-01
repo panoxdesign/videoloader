@@ -64,6 +64,12 @@ describe("buildCheckArgs", () => {
     expect(args).toContain("--no-playlist");
   });
 
+  it("asks for the whole playlist when the preview loads a video inside a playlist", () => {
+    const preview = buildCheckArgs({ url: "https://youtu.be/X?list=Y", cacheDir: "/data/cache", playlist: true });
+    expect(preview).toContain("--yes-playlist");
+    expect(preview).not.toContain("--no-playlist");
+  });
+
   it("prints url, media id and title cleaned for file names before the JSON, empty instead of NA when missing", () => {
     // Die `url` steht als JSON in der Zeile, `parseCheck` ordnet die Zeile darüber dem Flat-Eintrag zu.
     expect(valuesOf(args, "--print")).toContain("FILE\t%(url|)j\t%(id|)S\t%(title|)S");
