@@ -19,6 +19,9 @@ function addForm(page: Page) {
   };
 }
 
+/** Ein Video in einer Playlist. „Add“ fragt erst im Browser, YouTube wird nie erreicht. */
+const youtubeVideoInPlaylist = "https://www.youtube.com/watch?v=byxFUKxhT3s&list=PLtest";
+
 /** Die Antwort des Route Handlers, ohne yt-dlp. */
 function fulfillPreview(page: Page, result: LoadResult) {
   return page.route("**/api/playlist-preview", (route) => route.fulfill({ json: result }));
@@ -198,4 +201,79 @@ test("the preview endpoint refuses foreign origins and non-JSON bodies", async (
     endpoint,
   );
   expect(own).toBe(400);
+});
+
+test("a video in a playlist asks first and adds nothing before the choice", async ({ page }) => {
+  // Jeder Aufruf der Server Action trägt den Header `next-action`.
+  const actions: string[] = [];
+  page.on("request", (request) => {
+    if (request.headers()["next-action"]) actions.push(request.url());
+  });
+  let body: { url?: string; mediaType?: string } = {};
+  await page.route("**/api/playlist-preview", (route) => {
+    body = route.request().postDataJSON();
+    return route.fulfill({
+      json: {
+        kind: "preview",
+        view: {
+          key: "e2e-unknown-key",
+          title: "Mocked Playlist",
+          media: { mediaType: "video", resolution: "1080" },
+          startIntervalSeconds: 15,
+          items: [{ number: 1, url: "https://www.youtube.com/watch?v=byxFUKxhT3s", title: "Linked One", duration: 90, thumbnailUrl: null }],
+        },
+      } satisfies LoadResult,
+    });
+  });
+  await page.goto("/");
+  const { link, add } = addForm(page);
+  const question = page.getByRole("status").filter({ hasText: "This video is part of a playlist." });
+
+  await link.fill(youtubeVideoInPlaylist);
+  await add.click();
+  await expect(question).toBeVisible();
+  await expect(question.getByRole("button", { name: "Add this video" })).toBeVisible();
+
+  // Eine Änderung am Link nimmt die Frage zurück, „Add“ stellt sie wieder.
+  await link.fill(`${youtubeVideoInPlaylist}&t=1`);
+  await expect(question).toBeHidden();
+  await link.press("Enter");
+  await expect(question).toBeVisible();
+
+  await question.getByRole("button", { name: "Load whole playlist" }).click();
+  const dialog = page.getByRole("dialog", { name: "Mocked Playlist" });
+  await expect(dialog).toBeVisible();
+  await expect(question).toBeHidden();
+  expect(body).toMatchObject({ url: `${youtubeVideoInPlaylist}&t=1`, mediaType: "video" });
+
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  expect(actions).toEqual([]);
+});
+
+test("Load whole playlist without a playlist shows a general error, not “No downloadable media”", async ({ page }) => {
+  await fulfillPreview(page, { kind: "none" });
+  await page.goto("/");
+  const { link, add } = addForm(page);
+  await link.fill(youtubeVideoInPlaylist);
+  await add.click();
+  await page.getByRole("button", { name: "Load whole playlist" }).click();
+
+  const alert = page.getByRole("alertdialog", { name: "Can't preview playlist" });
+  await expect(alert).toContainText("Couldn't load the playlist. Please try again.");
+  await alert.getByRole("button", { name: "Close" }).click();
+  await expect(alert).toBeHidden();
+});
+
+test("Add this video sends the link to the server instead of asking again", async ({ page }) => {
+  await page.goto("/");
+  const { link, add } = addForm(page);
+  await link.fill(youtubeVideoInPlaylist);
+  await add.click();
+
+  // Die Prüfung selbst braucht YouTube, hier zählt nur, dass die Server Action den Link bekommt.
+  const action = page.waitForRequest((request) => !!request.headers()["next-action"]);
+  await page.getByRole("button", { name: "Add this video" }).click();
+  expect((await action).postData()).toContain(youtubeVideoInPlaylist);
+  await expect(page.getByText("This video is part of a playlist.")).toBeHidden();
 });

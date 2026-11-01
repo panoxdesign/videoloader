@@ -11,8 +11,8 @@ export function isPlaylistLink(link: string) {
 }
 
 /**
- * Reine Link-Erkennung: Trägt der Link ein Video und dazu eine Playlist? Dann reiht „Add“ das
- * Video ein und bietet danach „Load whole playlist“ an. Mixe (`list=RD…`) zählen nicht: yt-dlp
+ * Reine Link-Erkennung: Trägt der Link ein Video und dazu eine Playlist? Dann fragt „Add“ erst,
+ * ob nur das Video oder die ganze Playlist gemeint ist. Mixe (`list=RD…`) zählen nicht: yt-dlp
  * liefert sie bei jedem Aufruf anders, mit Wiederholungen und Hunderten Einträgen (Ticket 27).
  * Andere Quellen erkennt die Funktion in V1 nicht.
  */

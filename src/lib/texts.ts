@@ -50,11 +50,11 @@ export const texts = {
     largeSelection: (duration: string) =>
       `Large selection – downloads are spaced out to avoid rate limits, this will take at least ${duration}`,
   },
-  /** Video in einer Playlist (gemischter Link). Den Playlist-Namen kennt die App erst mit der Vorschau. */
+  /** Frage bei einem Video in einer Playlist (gemischter Link), vor jeder Prüfung. Den Playlist-Namen kennt die App erst mit der Vorschau. */
   mixed: {
-    added: (title: string) => `Added “${title}” to the queue. This video is part of a playlist.`,
+    question: "This video is part of a playlist.",
+    addVideo: "Add this video",
     loadPlaylist: "Load whole playlist",
-    dismiss: "Dismiss",
   },
   media: {
     label: "Media type",

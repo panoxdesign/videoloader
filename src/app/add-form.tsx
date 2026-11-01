@@ -5,7 +5,7 @@ import { useActionState, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { parseMedia, type Media } from "@/lib/media";
-import { isPlaylistLink } from "@/lib/playlist-link";
+import { isMixedLink, isPlaylistLink } from "@/lib/playlist-link";
 import { formatAge, mediaLabel } from "@/lib/queue-view";
 import { texts } from "@/lib/texts";
 import { addEntry, type AddState, type DuplicateWarning } from "./actions";
@@ -20,15 +20,17 @@ import { PlaylistDialog, type PlaylistDialogState } from "./playlist-dialog";
  * „Add“ wählt den Weg am Link (ADR 0002): Ein erkannter Playlist-Link lädt die Vorschau über den
  * Route Handler, abbrechbar mit „Cancel“. Alles andere prüft die Server Action. Liefert sie doch
  * eine Playlist, öffnet sich der Dialog direkt mit ihrem Ergebnis. Bei einem Video in einer
- * Playlist lädt „Load whole playlist“ die Playlist über denselben Route Handler (Ticket 27).
+ * Playlist fragt das Formular erst, ohne Server-Aufruf (Ticket 27): „Add this video“ geht an die
+ * Server Action, „Load whole playlist“ lädt die Playlist über denselben Route Handler.
  */
 export function AddForm() {
   const [state, formAction, pending] = useActionState(addEntry, {});
   // „Cancel“ und jede Änderung am Link blenden die Warnung aus, bis die nächste Antwort kommt.
   const [dismissed, setDismissed] = useState<AddState>();
   const duplicate = state === dismissed ? undefined : state.duplicate;
-  // Der Hinweis zu einem Video in einer Playlist bleibt beim Tippen stehen, nur „Dismiss“ oder das Laden der Playlist blenden ihn aus.
-  const mixed = state === dismissed ? undefined : state.mixed;
+  // Die Frage bei einem Video in einer Playlist. Bis zur Antwort wird nichts eingereiht.
+  const [choice, setChoice] = useState<string>();
+  const form = useRef<HTMLFormElement>(null);
   const input = useRef<HTMLInputElement>(null);
 
   // Der Dialog aus dem Route Handler. Sonst zeigt er die Vorschau, die `addEntry` geliefert hat.
@@ -49,15 +51,22 @@ export function AddForm() {
   };
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
-    const data = new FormData(event.currentTarget);
-    const url = String(data.get("url") ?? "").trim();
-    const media = parseMedia({ mediaType: data.get("mediaType"), resolution: data.get("resolution") });
-    if (!isPlaylistLink(url) || !media) return;
-    event.preventDefault();
-    void loadPreview(url, media);
+    setChoice(undefined);
+    // „Add this video“ und „Add anyway“ tragen einen Namen und gehen immer an die Server Action.
+    if ((event.nativeEvent as SubmitEvent).submitter?.getAttribute("name")) return;
+    const { url, media } = readForm(event.currentTarget);
+    if (!media) return;
+    if (isMixedLink(url)) {
+      event.preventDefault();
+      setDismissed(state);
+      setChoice(url);
+    } else if (isPlaylistLink(url)) {
+      event.preventDefault();
+      void loadPreview(url, media);
+    }
   };
 
-  // `noneMessage`: Bei „Load whole playlist“ ist das Video schon eingereiht, „No downloadable media“ wäre falsch.
+  // `noneMessage`: Bei „Load whole playlist“ gibt es das Video, nur die Playlist kam nicht. „No downloadable media“ wäre falsch.
   const loadPreview = async (url: string, media: Media, noneMessage: string = texts.addForm.noMedia) => {
     const controller = new AbortController();
     loading.current = controller;
@@ -87,13 +96,16 @@ export function AddForm() {
   };
 
   const loadPlaylist = () => {
-    if (mixed) void loadPreview(mixed.link, mixed.media, texts.playlist.failed);
+    const media = form.current && readForm(form.current).media;
+    if (choice && media) void loadPreview(choice, media, texts.playlist.failed);
+    setChoice(undefined);
   };
 
   return (
     // Mobil dreizeilig (Link, Optionen, „Add“), breit zweizeilig mit „Add“ neben dem Link.
     <>
     <form
+      ref={form}
       action={formAction}
       onSubmit={submit}
       aria-label={texts.addForm.title}
@@ -115,7 +127,10 @@ export function AddForm() {
         required
         disabled={pending}
         defaultValue={state.url}
-        onChange={() => duplicate && setDismissed(state)}
+        onChange={() => {
+          if (duplicate) setDismissed(state);
+          setChoice(undefined);
+        }}
         placeholder={texts.addForm.linkPlaceholder}
         className="sm:h-13"
       />
@@ -136,19 +151,11 @@ export function AddForm() {
           {state.notice}
         </p>
       )}
-      {mixed?.addedTitle && (
-        <MixedHint
-          title={mixed.addedTitle}
-          pending={pending}
-          onLoad={loadPlaylist}
-          onDismiss={() => setDismissed(state)}
-        />
-      )}
+      {choice && <MixedChoice pending={pending} onLoadPlaylist={loadPlaylist} />}
       {duplicate && (
         <DuplicateAlert
           duplicate={duplicate}
           pending={pending}
-          onLoadPlaylist={mixed && loadPlaylist}
           onCancel={() => {
             setDismissed(state);
             if (input.current) input.current.value = "";
@@ -176,13 +183,10 @@ export function AddForm() {
 function DuplicateAlert({
   duplicate,
   pending,
-  onLoadPlaylist,
   onCancel,
 }: {
   duplicate: DuplicateWarning;
   pending: boolean;
-  /** Nur bei einem Video in einer Playlist: Wer das Video schon hat, kommt so an die Playlist. */
-  onLoadPlaylist?: () => void;
   onCancel: () => void;
 }) {
   const { kind, title, position, ageMs } = duplicate;
@@ -206,11 +210,6 @@ function DuplicateAlert({
           <Button type="submit" name="addAnyway" value={duplicate.key} disabled={pending}>
             {texts.duplicate.addAnyway}
           </Button>
-          {onLoadPlaylist && (
-            <Button type="button" variant="quiet" disabled={pending} onClick={onLoadPlaylist}>
-              {texts.mixed.loadPlaylist}
-            </Button>
-          )}
           <Button type="button" variant="quiet" disabled={pending} onClick={onCancel}>
             {texts.duplicate.cancel}
           </Button>
@@ -228,27 +227,29 @@ function DuplicateAlert({
   );
 }
 
-/** Hinweis nach dem Einreihen eines Videos aus einem gemischten Link. */
-function MixedHint({
-  title,
-  pending,
-  onLoad,
-  onDismiss,
-}: {
-  title: string;
-  pending: boolean;
-  onLoad: () => void;
-  onDismiss: () => void;
-}) {
+/** Link und Medienart, wie sie gerade im Formular stehen. */
+function readForm(form: HTMLFormElement) {
+  const data = new FormData(form);
+  return {
+    url: String(data.get("url") ?? "").trim(),
+    media: parseMedia({ mediaType: data.get("mediaType"), resolution: data.get("resolution") }),
+  };
+}
+
+/**
+ * Frage bei einem Video in einer Playlist. „Add this video“ schickt das Formular ab, die Server
+ * Action reiht wie bei jedem Einzelvideo ein, mit Duplikat-Warnung.
+ */
+function MixedChoice({ pending, onLoadPlaylist }: { pending: boolean; onLoadPlaylist: () => void }) {
   return (
     <div role="status" className="flex flex-col gap-3 rounded-md bg-muted px-4 py-3.5 text-sm text-foreground sm:col-span-2">
-      <p className="[overflow-wrap:anywhere]">{texts.mixed.added(title)}</p>
+      <p>{texts.mixed.question}</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="quiet" disabled={pending} onClick={onLoad}>
-          {texts.mixed.loadPlaylist}
+        <Button type="submit" name="onlyVideo" value="1" variant="quiet" disabled={pending}>
+          {texts.mixed.addVideo}
         </Button>
-        <Button type="button" variant="quiet" disabled={pending} onClick={onDismiss}>
-          {texts.mixed.dismiss}
+        <Button type="button" variant="quiet" disabled={pending} onClick={onLoadPlaylist}>
+          {texts.mixed.loadPlaylist}
         </Button>
       </div>
     </div>

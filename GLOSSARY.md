@@ -37,7 +37,7 @@ Die Medien einer Playlist, wie sie die Prüfung geliefert hat, aus denen man vor
 _Avoid_: Auswahl, Playlist-Liste
 
 **Gemischter Link**:
-Ein Link auf ein einzelnes Medium, der zusätzlich eine Playlist nennt, bei YouTube `watch?v=X&list=Y` oder `youtu.be/X?list=Y`. „Add“ reiht nur das Medium ein und bietet die Playlist danach an. Ein Link mit Mix zählt nicht dazu.
+Ein Link auf ein einzelnes Medium, der zusätzlich eine Playlist nennt, bei YouTube `watch?v=X&list=Y` oder `youtu.be/X?list=Y`. „Add“ fragt erst, ob nur das Medium oder die ganze Playlist gemeint ist. Ein Link mit Mix zählt nicht dazu.
 _Avoid_: Playlist-Link (meint die reine Playlist)
 
 **Mix**:
