@@ -45,10 +45,10 @@ export type AddState = {
 
 /**
  * Ein Video in einer Playlist (Ticket 27). `link` und `media` laden mit „Load whole playlist“ die
- * Playlist, in derselben Medienart, damit das Video dort als Duplikat markiert ist. `added` ist der
- * Titel des eingereihten Videos und fehlt neben der Duplikat-Warnung.
+ * Playlist, in derselben Medienart, damit das Video dort als Duplikat markiert ist. `addedTitle` ist
+ * der Titel des eingereihten Videos und fehlt neben der Duplikat-Warnung.
  */
-export type MixedLink = { link: string; media: Media; added?: string };
+export type MixedLink = { link: string; media: Media; addedTitle?: string };
 
 /**
  * Prüft den Link mit yt-dlp und reiht ein Einzelvideo ein. Ein Duplikat ergibt erst eine Warnung.
@@ -74,6 +74,7 @@ export async function addEntry(_previous: AddState, formData: FormData): Promise
   if (result.kind === "none") return { url, error: texts.addForm.noMedia };
 
   const db = getDb();
+  const mixed: MixedLink | undefined = isMixedLink(url) ? { link: url, media } : undefined;
   const identity = { ...result.media, mediaType: media.mediaType };
   const key = duplicateKey(identity);
   if (key && formData.get("addAnyway") !== key) {
@@ -82,7 +83,7 @@ export async function addEntry(_previous: AddState, formData: FormData): Promise
       const { kind, entry } = duplicate;
       return {
         url,
-        mixed: isMixedLink(url) ? { link: url, media } : undefined,
+        mixed,
         duplicate: {
           key,
           kind,
@@ -100,7 +101,7 @@ export async function addEntry(_previous: AddState, formData: FormData): Promise
 
   enqueue(db, url, media, Date.now(), result.media);
   refresh();
-  return isMixedLink(url) ? { mixed: { link: url, media, added: result.media.title ?? url } } : {};
+  return mixed ? { mixed: { ...mixed, addedTitle: result.media.title ?? url } } : {};
 }
 
 /**

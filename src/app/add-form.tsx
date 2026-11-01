@@ -27,6 +27,7 @@ export function AddForm() {
   // „Cancel“ und jede Änderung am Link blenden die Warnung aus, bis die nächste Antwort kommt.
   const [dismissed, setDismissed] = useState<AddState>();
   const duplicate = state === dismissed ? undefined : state.duplicate;
+  // Der Hinweis zu einem Video in einer Playlist bleibt beim Tippen stehen, nur „Dismiss“ oder das Laden der Playlist blenden ihn aus.
   const mixed = state === dismissed ? undefined : state.mixed;
   const input = useRef<HTMLInputElement>(null);
 
@@ -84,6 +85,10 @@ export function AddForm() {
     else setLoaded({ kind: "closed" });
   };
 
+  const loadPlaylist = () => {
+    if (mixed) void loadPreview(mixed.link, mixed.media);
+  };
+
   return (
     // Mobil dreizeilig (Link, Optionen, „Add“), breit zweizeilig mit „Add“ neben dem Link.
     <>
@@ -130,11 +135,11 @@ export function AddForm() {
           {state.notice}
         </p>
       )}
-      {mixed?.added && (
+      {mixed?.addedTitle && (
         <MixedHint
-          title={mixed.added}
+          title={mixed.addedTitle}
           pending={pending}
-          onLoad={() => loadPreview(mixed.link, mixed.media)}
+          onLoad={loadPlaylist}
           onDismiss={() => setDismissed(state)}
         />
       )}
@@ -142,7 +147,7 @@ export function AddForm() {
         <DuplicateAlert
           duplicate={duplicate}
           pending={pending}
-          onLoadPlaylist={mixed && (() => loadPreview(mixed.link, mixed.media))}
+          onLoadPlaylist={mixed && loadPlaylist}
           onCancel={() => {
             setDismissed(state);
             if (input.current) input.current.value = "";
@@ -238,10 +243,10 @@ function MixedHint({
     <div role="status" className="flex flex-col gap-3 rounded-md bg-muted px-4 py-3.5 text-sm text-foreground sm:col-span-2">
       <p className="[overflow-wrap:anywhere]">{texts.mixed.added(title)}</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" disabled={pending} onClick={onLoad}>
+        <Button type="button" variant="quiet" disabled={pending} onClick={onLoad}>
           {texts.mixed.loadPlaylist}
         </Button>
-        <Button type="button" variant="ghost" disabled={pending} onClick={onDismiss}>
+        <Button type="button" variant="quiet" disabled={pending} onClick={onDismiss}>
           {texts.mixed.dismiss}
         </Button>
       </div>

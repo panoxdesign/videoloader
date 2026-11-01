@@ -65,7 +65,7 @@ describe("buildCheckArgs", () => {
   });
 
   it("asks for the whole playlist when the preview loads a video inside a playlist", () => {
-    const preview = buildCheckArgs({ url: "https://youtu.be/X?list=Y", cacheDir: "/data/cache", playlist: true });
+    const preview = buildCheckArgs({ url: "https://youtu.be/X?list=Y", cacheDir: "/data/cache", wholePlaylist: true });
     expect(preview).toContain("--yes-playlist");
     expect(preview).not.toContain("--no-playlist");
   });

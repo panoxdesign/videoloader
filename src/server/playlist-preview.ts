@@ -136,7 +136,7 @@ export async function loadPreview({
     url,
     cacheDir: paths.cache,
     signal: AbortSignal.any([signal, timeout]),
-    playlist: true,
+    wholePlaylist: true,
   });
   if (signal.aborted) return { kind: "cancelled" };
   if (timeout.aborted) return { kind: "timedOut" };

@@ -59,6 +59,7 @@ describe("isMixedLink", () => {
     ["another source with the same path", "https://example.com/watch?v=dQw4w9WgXcQ&list=PLabc123"],
     ["a host that only ends like YouTube", "https://notyoutube.com/watch?v=dQw4w9WgXcQ&list=PLabc123"],
     ["a fixture link", "http://fixtures:8080/feed.rss"],
+    ["a fixture link with a video and a list", "http://fixtures:8080/watch?v=clip-one&list=mix"],
     ["text that is not a link", "not a link"],
   ])("is false for %s", (_, link) => {
     expect(isMixedLink(link)).toBe(false);

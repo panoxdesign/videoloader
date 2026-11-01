@@ -36,6 +36,14 @@ _Avoid_: Liste, Kanal
 Die Medien einer Playlist, wie sie die Prüfung geliefert hat, aus denen man vor dem Einreihen auswählt. Sie gilt 15 Minuten und lässt sich genau einmal einreihen.
 _Avoid_: Auswahl, Playlist-Liste
 
+**Gemischter Link**:
+Ein Link auf ein einzelnes Medium, der zusätzlich eine Playlist nennt, bei YouTube `watch?v=X&list=Y` oder `youtu.be/X?list=Y`. „Add“ reiht nur das Medium ein und bietet die Playlist danach an. Ein Link mit Mix zählt nicht dazu.
+_Avoid_: Playlist-Link (meint die reine Playlist)
+
+**Mix**:
+Eine Liste, die YouTube zu einem Medium erzeugt (`list` beginnt mit `RD`). Sie ist bei jedem Aufruf anders und enthält Wiederholungen. Die App behandelt sie nicht als Playlist. Alben auf YouTube Music (`RDCLAK…`) sind zwar feste Listen, fallen aber unter dieselbe Regel und werden nicht unterstützt.
+_Avoid_: Radio, Automix
+
 **Mediendatei**:
 Die fertige heruntergeladene Datei eines Queue-Eintrags, die auf dem Server liegt und über die App abrufbar ist. Jede Mediendatei gehört zu genau einem Queue-Eintrag.
 _Avoid_: Download, Output
