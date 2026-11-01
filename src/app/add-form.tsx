@@ -56,7 +56,8 @@ export function AddForm() {
     loading.current = controller;
     setDismissed(state);
     setLoaded({ kind: "loading" });
-    let result: LoadResult;
+    // Bleibt leer, wenn die Vorschau nicht ankommt. Am Link liegt es dann nicht, also nicht „No downloadable media“.
+    let result: LoadResult | undefined;
     try {
       const response = await fetch("/api/playlist-preview", {
         method: "POST",
@@ -64,13 +65,15 @@ export function AddForm() {
         body: JSON.stringify({ url, ...media }),
         signal: controller.signal,
       });
-      result = await response.json();
+      // 403/415 vom Origin-Schutz, 400, 502 eines Proxys.
+      if (response.ok) result = await response.json();
     } catch {
-      result = controller.signal.aborted ? { kind: "cancelled" } : { kind: "none" };
+      if (controller.signal.aborted) result = { kind: "cancelled" };
     }
     if (loading.current !== controller) return;
     loading.current = undefined;
-    if (result.kind === "preview") setLoaded({ kind: "preview", view: result.view });
+    if (!result) setLoaded({ kind: "error", message: texts.playlist.failed });
+    else if (result.kind === "preview") setLoaded({ kind: "preview", view: result.view });
     else if (result.kind === "timedOut") setLoaded({ kind: "error", message: texts.playlist.timedOut, timedOut: true });
     else if (result.kind === "none") setLoaded({ kind: "error", message: texts.addForm.noMedia });
     else setLoaded({ kind: "closed" });

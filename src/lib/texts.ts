@@ -40,6 +40,8 @@ export const texts = {
     alreadyInQueue: "Already in queue",
     errorTitle: "Can't preview playlist",
     timedOut: "Playlist too large to preview (timed out)",
+    /** Server lehnt ab (etwa 403 hinter falsch eingerichtetem Proxy), Netzfehler, keine JSON-Antwort. */
+    failed: "Couldn't load the playlist. Please try again.",
     // Erscheint erst mit der Fehlerklassifikation aus Ticket 21.
     rateLimited: "Source is rate-limiting requests, try again later",
     close: "Close",

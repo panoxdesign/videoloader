@@ -159,6 +159,20 @@ test("a preview that times out shows the timeout message", async ({ page }) => {
   await expect(alert).toBeHidden();
 });
 
+test("a refused preview request shows a general error, not “No downloadable media”", async ({ page }) => {
+  // So sieht es hinter einem Proxy aus, der den Host umschreibt: die Origin-Prüfung sagt 403.
+  await page.route("**/api/playlist-preview", (route) => route.fulfill({ status: 403, json: { kind: "none" } }));
+  await page.goto("/");
+  const { link, add } = addForm(page);
+  await link.fill(youtubePlaylist);
+  await add.click();
+
+  const alert = page.getByRole("alertdialog", { name: "Can't preview playlist" });
+  await expect(alert).toContainText("Couldn't load the playlist. Please try again.");
+  await alert.getByRole("button", { name: "Close" }).click();
+  await expect(alert).toBeHidden();
+});
+
 test("the preview endpoint refuses foreign origins and non-JSON bodies", async ({ page, request, baseURL }) => {
   const endpoint = "/api/playlist-preview";
   // Gültige Eingaben: Ohne die Prüfung würde yt-dlp die Vorschau laden.
