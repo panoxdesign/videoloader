@@ -1,4 +1,5 @@
-import { and, asc, count, eq, lt, lte, or } from "drizzle-orm";
+import { and, asc, count, eq, inArray, lt, lte, max, or } from "drizzle-orm";
+import { statesAllowing } from "@/lib/entry-state";
 import type { Media } from "@/lib/media";
 import type { CheckedMedia, FileNaming } from "./check/parse-check";
 import type { Db, Tx } from "./db/open";
@@ -62,4 +63,56 @@ export function queuePosition(db: Db, entry: Pick<QueueEntry, "id" | "queuedAt">
     )
     .all();
   return ahead;
+}
+
+/**
+ * „Retry“ für einen fehlgeschlagenen oder abgebrochenen Eintrag: wieder wartend, hinter allen
+ * anderen wartenden, mit derselben Medienart und Auflösung. Fehler, Rohlog, Fortschritt und die
+ * Uhr der Aufbewahrungsfrist werden geleert. Den reservierten Namen behält er, der Start prüft,
+ * ob er noch frei ist. Keine Duplikat-Prüfung. `false`, wenn der Eintrag nicht (mehr) passt.
+ */
+export function retryEntry(db: Db, id: number, now: number) {
+  return db.transaction((tx) => {
+    // Einträge einer Playlist teilen sich einen Ordnungswert, und bei Gleichstand entscheidet die
+    // ID. Deshalb nicht einfach `now`, sondern mindestens eins hinter dem letzten wartenden.
+    const [{ last }] = tx
+      .select({ last: max(queueEntries.queuedAt) })
+      .from(queueEntries)
+      .where(eq(queueEntries.state, "waiting"))
+      .all();
+    const updated = tx
+      .update(queueEntries)
+      .set({
+        state: "waiting",
+        queuedAt: Math.max(now, (last ?? -Infinity) + 1),
+        finishedAt: null,
+        errorCategory: null,
+        rawLog: null,
+        phase: null,
+        downloadedBytes: null,
+        totalBytes: null,
+        totalBytesEstimate: null,
+        fragmentIndex: null,
+        fragmentCount: null,
+        speed: null,
+        eta: null,
+        postprocessor: null,
+        pgid: null,
+      })
+      .where(and(eq(queueEntries.id, id), inArray(queueEntries.state, statesAllowing("retry"))))
+      .run();
+    return updated.changes > 0;
+  });
+}
+
+/**
+ * „Remove“ ohne Rückfrage für wartende, fehlgeschlagene und abgebrochene Einträge. Hat der Worker
+ * den Eintrag inzwischen gestartet, bleibt er (laufende entfernt erst Ticket 22).
+ */
+export function removeEntry(db: Db, id: number) {
+  const removed = db
+    .delete(queueEntries)
+    .where(and(eq(queueEntries.id, id), inArray(queueEntries.state, statesAllowing("remove"))))
+    .run();
+  return removed.changes > 0;
 }

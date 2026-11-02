@@ -1,0 +1,1 @@
+ALTER TABLE `queue_entries` ADD `raw_log` text;

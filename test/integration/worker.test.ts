@@ -31,6 +31,13 @@ printf media > "$dir/$(printf '%s' "$out" | sed 's/%(ext)s$/mp4/; s/%%/%/g')"
 exit 1
 `;
 
+/** Fake-yt-dlp: schreibt 100 000 Zeilen (rund 5 MB) auf stderr, dann einen Fehler, und endet mit 1. */
+const CHATTY_FAIL = `#!/bin/sh
+seq 1 100000 | sed 's/^/[debug] chatty line /' >&2
+echo 'ERROR: [generic] x: Private video' >&2
+exit 1
+`;
+
 /**
  * Ein Worker auf einem frischen Datenordner. `add` prüft den Link wie „Add“ (immer mit dem
  * echten yt-dlp) und reiht ihn dann ein. `ytDlpPath` gilt nur für den Download.
@@ -160,7 +167,10 @@ describe("worker", () => {
     await writeFile(worker.paths.downloads, "not a directory");
 
     const url = `${fixtureUrl}/videos/clip-one`;
-    expect(await worker.finished(await worker.add(url, VIDEO))).toMatchObject({ state: "failed", errorCategory: "other" });
+    const failed = await worker.finished(await worker.add(url, VIDEO));
+    expect(failed).toMatchObject({ state: "failed", errorCategory: "other" });
+    // Ohne yt-dlp-Ausgabe steht der Fehler der App im Rohlog, sonst wäre „Show details“ leer.
+    expect(failed.rawLog).toContain("ENOTDIR");
     expect(worker.lines.find((line) => line.includes(" ERROR "))).toContain("could not reserve a file name");
 
     await rm(worker.paths.downloads);
@@ -246,7 +256,9 @@ describe("worker", () => {
     enqueuePlaylist(worker.db, key, [1, 2], Date.now());
     const [broken, fine] = listEntries(worker.db);
 
-    expect(await worker.finished(broken.id)).toMatchObject({ state: "failed", fileName: null });
+    // Die Prüfung vor dem Start bekommt für die fehlende Seite einen 404.
+    expect(await worker.finished(broken.id)).toMatchObject({ state: "failed", fileName: null, errorCategory: "unavailable" });
+    expect((await worker.finished(broken.id)).rawLog).toContain("HTTP Error 404");
     expect(await worker.finished(fine.id)).toMatchObject({ state: "done", fileName: "Mix/002 - Clip One [clip-one].mp4" });
   });
 
@@ -272,7 +284,12 @@ describe("worker", () => {
     );
     enqueuePlaylist(worker.db, key, [1], Date.now());
 
-    expect(await worker.finished(listEntries(worker.db)[0].id)).toMatchObject({ state: "failed", fileName: null, filePath: null });
+    expect(await worker.finished(listEntries(worker.db)[0].id)).toMatchObject({
+      state: "failed",
+      fileName: null,
+      filePath: null,
+      errorCategory: "live",
+    });
   });
 
   it("extracts a 192 kbps MP3 with cover and title", async () => {
@@ -284,5 +301,47 @@ describe("worker", () => {
     expect(streams.find((s) => s.codec_type === "audio")).toMatchObject({ codec_name: "mp3", bit_rate: "192000" });
     expect(streams.find((s) => s.codec_type === "video")?.disposition.attached_pic).toBe(1);
     expect(format.tags?.title).toBe("Clip Two");
+  });
+
+  describe("failures", () => {
+    it("classifies a 404 for the media as unavailable and keeps the yt-dlp output as raw log", async () => {
+      const { entry, dataDir } = await download(`${fixtureUrl}/videos/gone-clip`, VIDEO);
+
+      expect(entry).toMatchObject({ state: "failed", errorCategory: "unavailable", filePath: null, pgid: null });
+      expect(entry.finishedAt).toBeGreaterThan(0);
+      expect(entry.rawLog).toContain("ERROR: unable to download video data: HTTP Error 404");
+      expect(entry.rawLog).toContain("[generic] gone-clip: Extracting information");
+      expect(existsSync(join(dataPaths(dataDir).tmp, String(entry.id)))).toBe(false);
+    });
+
+    it("classifies a connection that breaks off mid-download as a network error", async () => {
+      const { entry } = await download(`${fixtureUrl}/videos/cut-clip`, VIDEO);
+
+      expect(entry).toMatchObject({ state: "failed", errorCategory: "network" });
+      expect(entry.rawLog).toMatch(/^ERROR: .*Giving up after \d+ retries$/m);
+    });
+
+    it("keeps at most the last 64 KB of the output as raw log", async () => {
+      const fake = join(await tempDataDir(), "yt-dlp");
+      await writeFile(fake, CHATTY_FAIL, { mode: 0o755 });
+      const worker = await startTestWorker({ ytDlpPath: fake });
+
+      const entry = await worker.finished(await worker.add(`${fixtureUrl}/videos/clip-one`, VIDEO));
+
+      expect(entry).toMatchObject({ state: "failed", errorCategory: "private" });
+      expect(Buffer.byteLength(entry.rawLog!)).toBeLessThanOrEqual(64 * 1024);
+      expect(Buffer.byteLength(entry.rawLog!)).toBeGreaterThan(60 * 1024);
+      expect(entry.rawLog).toMatch(/chatty line 100000\nERROR: \[generic\] x: Private video$/);
+      expect(entry.rawLog).not.toContain("chatty line 1\n");
+    });
+
+    it("goes on with the next entry after a failure", async () => {
+      const worker = await startTestWorker();
+      const failing = await worker.add(`${fixtureUrl}/videos/gone-clip`, VIDEO);
+      const next = await worker.add(`${fixtureUrl}/videos/clip-three`, VIDEO);
+
+      expect(await worker.finished(failing)).toMatchObject({ state: "failed" });
+      expect(await worker.finished(next)).toMatchObject({ state: "done" });
+    });
   });
 });

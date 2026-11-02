@@ -25,6 +25,9 @@ export function buildDownloadArgs({ url, media, fileName, downloadsDir, tmpDir, 
     "postprocess:POSTPROCESS %(progress.{status,postprocessor})j",
     "--print",
     "after_move:DONE %(.{filepath,id,title,ext,extractor_key,format_id})j",
+    // `--print` macht yt-dlp still. Die Info-Zeilen gehören aber in den Rohlog, Fortschritt
+    // kommt weiter nur über die Templates.
+    "--no-quiet",
     "--windows-filenames",
     ...commonArgs(cacheDir),
     ...mediaArgs(media),

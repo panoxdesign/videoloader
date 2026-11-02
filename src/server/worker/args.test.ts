@@ -41,6 +41,12 @@ describe("buildDownloadArgs", () => {
     expect(args).not.toContain("-S");
   });
 
+  it("keeps the info lines that --print would silence, for the raw log", () => {
+    const args = buildDownloadArgs({ ...base, media: { mediaType: "audio", resolution: null } });
+    // `--print` schaltet `--quiet` ein, ein späteres `--no-quiet` wieder aus.
+    expect(args.indexOf("--no-quiet")).toBeGreaterThan(args.indexOf("--print"));
+  });
+
   it("ends with the URL after --", () => {
     const args = buildDownloadArgs({ ...base, url: "-weird", media: { mediaType: "audio", resolution: null } });
     expect(args.slice(-2)).toEqual(["--", "-weird"]);

@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { lstatSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { createInterface } from "node:readline";
+import type { Readable } from "node:stream";
 import { liveBlock } from "@/lib/live";
 import { parseMedia } from "@/lib/media";
 import { CHECK_TIMEOUT_MS, checkLink } from "../check/check";
@@ -14,7 +14,9 @@ import { isInside } from "../files/inside";
 import type { Logger } from "../log";
 import { dataPaths } from "../paths";
 import { buildDownloadArgs } from "./args";
+import { classifyError, type ErrorCategory } from "./classify-error";
 import { parseLine, type DoneLine } from "./parse-line";
+import { RawLog } from "./raw-log";
 
 /** Feste Werte im Code, für Tests injizierbar. */
 export type Timing = { tickMs: number };
@@ -36,6 +38,19 @@ export type Worker = { stop(): Promise<void> };
 
 const SLOTS = 1;
 const PROGRESS_WRITE_INTERVAL_MS = 1000;
+
+/**
+ * Ein Fehlschlag, den die App vor dem Download selbst erkennt, mit Kategorie. `message` landet im
+ * Rohlog, denn yt-dlp hat dann nichts geschrieben.
+ */
+class EntryFailure extends Error {
+  constructor(
+    readonly category: ErrorCategory,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 export function startWorker(deps: WorkerDeps): Worker {
   const running = new Set<Promise<void>>();
@@ -109,7 +124,12 @@ function claimNext({ db, dataDir, clock, log }: WorkerDeps): QueueEntry | undefi
       } catch (error) {
         log.error(`queue entry ${next.id}: could not reserve a file name: ${errorText(error)}`);
         tx.update(queueEntries)
-          .set({ state: "failed", errorCategory: "other", finishedAt: clock.now() })
+          .set({
+            state: "failed",
+            errorCategory: "other",
+            rawLog: `could not reserve a file name: ${errorMessage(error)}`,
+            finishedAt: clock.now(),
+          })
           .where(eq(queueEntries.id, next.id))
           .run();
       }
@@ -170,9 +190,14 @@ async function completeNaming({ db, ytDlpPath, dataDir }: WorkerDeps, entry: Que
     cacheDir: paths.cache,
     signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
   });
-  if (result.kind !== "video") throw new Error(`check before start found ${result.kind === "none" ? "nothing" : "a playlist"}`);
+  if (result.kind === "none") {
+    // Die `ERROR:`-Zeile der Prüfung sagt, warum, etwa ein privates oder gelöschtes Video.
+    if (result.error) throw new EntryFailure(classifyError(result.error), result.error);
+    throw new EntryFailure("other", `check before start found nothing${result.timedOut ? " (timed out)" : ""}`);
+  }
+  if (result.kind === "playlist") throw new EntryFailure("other", "check before start found a playlist");
   const { media } = result;
-  if (liveBlock(media.liveStatus)) throw new Error(`check before start found a stream (${media.liveStatus})`);
+  if (liveBlock(media.liveStatus)) throw new EntryFailure("live", `check before start found a stream (${media.liveStatus})`);
   return db.transaction((tx) => {
     const checked = {
       source: media.source ?? entry.source,
@@ -198,6 +223,9 @@ async function runSlot(deps: WorkerDeps, claimed: QueueEntry) {
 
   let done: DoneLine | undefined;
   let exitCode: number | null = null;
+  let thrown: unknown;
+  // Alles, was der Zeilen-Parser nicht auswertet, aus stdout und stderr in der Reihenfolge des Eintreffens.
+  const rawLog = new RawLog();
   try {
     await mkdir(tmpDir, { recursive: true });
     await mkdir(paths.downloads, { recursive: true });
@@ -221,7 +249,9 @@ async function runSlot(deps: WorkerDeps, claimed: QueueEntry) {
     let lastProgressWrite = -Infinity;
     const onLine = (line: string) => {
       const parsed = parseLine(line);
-      if (parsed.kind === "done") {
+      if (parsed.kind === "log") {
+        rawLog.push(parsed.line);
+      } else if (parsed.kind === "done") {
         done = parsed;
       } else if (parsed.kind === "postprocess") {
         update({ phase: "postprocess", postprocessor: parsed.postprocessor });
@@ -241,13 +271,16 @@ async function runSlot(deps: WorkerDeps, claimed: QueueEntry) {
         });
       }
     };
-    createInterface({ input: child.stdout }).on("line", onLine);
-    createInterface({ input: child.stderr }).on("line", onLine);
+    readLines(child.stdout, onLine);
+    readLines(child.stderr, onLine);
 
     exitCode = await new Promise<number | null>((resolve) => {
       child.on("error", () => resolve(null));
       child.on("close", (code) => resolve(code));
     });
+  } catch (error) {
+    thrown = error;
+    throw error;
   } finally {
     // Erst aufräumen, dann den Zustand schreiben: Wer „fertig“ sieht, findet keine Reste mehr.
     await rm(tmpDir, { recursive: true, force: true }).catch((error) =>
@@ -275,10 +308,40 @@ async function runSlot(deps: WorkerDeps, claimed: QueueEntry) {
           log.warn(`queue entry ${entry.id}: could not remove ${file}: ${error}`),
         );
       }
-      // Die Fehlerklassifikation folgt in einem späteren Ticket.
-      update({ state: "failed", errorCategory: "other", finishedAt: clock.now(), pgid: null });
+      if (thrown !== undefined) rawLog.push(errorMessage(thrown));
+      // Rate-Limit wird schon erkannt, verhält sich aber bis Ticket 29 wie jeder andere Fehler.
+      update({
+        state: "failed",
+        errorCategory: thrown instanceof EntryFailure ? thrown.category : classifyError(rawLog.text()),
+        rawLog: rawLog.text(),
+        finishedAt: clock.now(),
+        pgid: null,
+      });
     }
   }
+}
+
+/**
+ * Zeilen nur an `\n` trennen und `\r` entfernen. yt-dlp schreibt `\r` auch mitten in eine Zeile,
+ * etwa `ERROR: \r[download] Got error: …`, und `readline` trennte dort die Meldung vom Präfix.
+ * `close` des Kindprozesses kommt erst nach `end` beider Streams, es geht also keine Zeile verloren.
+ */
+function readLines(stream: Readable, onLine: (line: string) => void) {
+  let rest = "";
+  stream.setEncoding("utf8");
+  stream.on("data", (chunk: string) => {
+    const lines = (rest + chunk).split("\n");
+    rest = lines.pop() ?? "";
+    for (const line of lines) onLine(line.replaceAll("\r", ""));
+  });
+  stream.on("end", () => {
+    if (rest) onLine(rest.replaceAll("\r", ""));
+  });
+}
+
+/** Für den Rohlog: ohne Stack, den liest dort niemand. */
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function errorText(error: unknown) {

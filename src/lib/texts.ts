@@ -1,4 +1,5 @@
 import type { EntryState } from "@/server/db/schema";
+import type { ErrorCategory } from "@/server/worker/classify-error";
 import type { Resolution } from "./media";
 import type { Filter } from "./queue-view";
 import type { Theme } from "./theme";
@@ -52,7 +53,7 @@ export const texts = {
     timedOut: "Playlist too large to preview (timed out)",
     /** Server lehnt ab (etwa 403 hinter falsch eingerichtetem Proxy), Netzfehler, keine JSON-Antwort. */
     failed: "Couldn't load the playlist. Please try again.",
-    // Erscheint erst mit der Fehlerklassifikation aus Ticket 21.
+    // Erscheint erst mit Ticket 29 (Rate-Limit in der Vorschau).
     rateLimited: "Source is rate-limiting requests, try again later",
     close: "Close",
     expired: "This preview has expired. Add the playlist link again.",
@@ -112,6 +113,17 @@ export const texts = {
   actions: {
     download: "Download",
     delete: "Delete",
+    retry: "Retry",
+    remove: "Remove",
+  },
+  /** „Show details“ an fehlgeschlagenen Einträgen, mit dem Rohlog von yt-dlp. */
+  details: {
+    show: "Show details",
+    hide: "Hide details",
+    label: (title: string) => `yt-dlp output for “${title}”`,
+    loading: "Loading details…",
+    failed: "Couldn't load the details.",
+    empty: "yt-dlp wrote nothing.",
   },
   deleteDialog: {
     title: "Delete this file?",
@@ -135,7 +147,22 @@ export const texts = {
   time: {
     justNow: "just now",
   },
+  /** Kurzmeldungen fehlgeschlagener Einträge je Fehlerkategorie. */
   errors: {
+    // Bis Ticket 29 verhält sich ein Rate-Limit wie jeder andere Fehler.
+    rateLimit: "The source is rate-limiting downloads. Try again later.",
+    private: "This video is private.",
+    unavailable: "This video is unavailable or has been removed.",
+    geoBlocked: "This video isn't available in the server's country.",
+    ageRestricted: "This video is age-restricted and requires sign-in.",
+    botCheck: "The source is blocking this server (bot check).",
+    loginRequired: "This source requires sign-in.",
+    network: "Network error – check the server's connection.",
+    unsupportedLink: "This link isn't supported.",
+    noFormat: "No matching format available.",
+    drm: "DRM-protected media can't be downloaded.",
+    jsChallenge: "Couldn't process this video – yt-dlp may need an update.",
+    live: "Live streams can't be downloaded.",
     other: "Download failed.",
-  } as Record<string, string>,
+  } satisfies Record<ErrorCategory, string>,
 } as const;

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { MEDIA_TYPES, RESOLUTIONS } from "../../lib/media";
+import { ERROR_CATEGORIES } from "../worker/classify-error";
 
 /** wartend, läuft, fertig, fehlgeschlagen, abgebrochen */
 export const ENTRY_STATES = ["waiting", "running", "done", "failed", "cancelled"] as const;
@@ -61,7 +62,10 @@ export const queueEntries = sqliteTable(
     filePath: text(),
     /** In Bytes, gemessen bei Fertigstellung. */
     fileSize: integer(),
-    errorCategory: text(),
+    /** Nur bei fehlgeschlagenen Einträgen. Die Kurzmeldung dazu steht in `texts.errors`. */
+    errorCategory: text({ enum: ERROR_CATEGORIES }),
+    /** Die letzten 64 KB der Ausgabe von yt-dlp ohne Fortschrittszeilen, nur bei fehlgeschlagenen Einträgen. */
+    rawLog: text(),
   },
   (t) => [
     check(

@@ -11,7 +11,7 @@ import { CLIP, DASH_DIR, DASH_MANIFEST, ensureMedia, THUMBNAIL } from "./media.t
  * Die Medien-ID kommt aus dem Dateinamen des Mediums, deshalb liefert jede Seite
  * dasselbe Medium unter ihrem eigenen Namen aus (`/media/clip-one.mp4`).
  */
-const PAGES: Record<string, { title: string }> = {
+const PAGES: Record<string, { title: string; media?: "missing" | "cut" | "flaky" }> = {
   "clip-one": { title: "Clip One" },
   "clip-two": { title: "Clip Two" },
   "clip-three": { title: "Clip Three" },
@@ -26,6 +26,12 @@ const PAGES: Record<string, { title: string }> = {
   "mix-one": { title: "Mix One" },
   "mix-two": { title: "Mix Two" },
   "mix-three": { title: "Mix Three" },
+  // Fehlerfälle für Ticket 21: Die Seite ist da, die Prüfung bei „Add“ klappt, erst der Download
+  // scheitert. „missing“ antwortet auf das Medium mit 404, „cut“ bricht die Verbindung mittendrin ab,
+  // „flaky“ antwortet beim ersten Abruf mit 404 und liefert danach (für „Retry“ im E2E).
+  "gone-clip": { title: "Gone Clip", media: "missing" },
+  "cut-clip": { title: "Cut Clip", media: "cut" },
+  "flaky-clip": { title: "Flaky Clip", media: "flaky" },
 };
 
 /**
@@ -43,6 +49,8 @@ export async function startFixtureServer(options: {
   host?: string;
 }): Promise<FixtureServer> {
   const { mediaDir } = options;
+  /** Medien mit „flaky“, die ihren 404 schon hatten. */
+  const failedOnce = new Set<string>();
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
     const origin = `http://${req.headers.host}`;
@@ -135,6 +143,17 @@ seg101.ts
     }
 
     const media = url.pathname.match(/^\/media\/([\w-]+)\.mp4$/);
+    const failsNow = media && PAGES[media[1]]?.media === "flaky" && !failedOnce.has(media[1]);
+    if (media && failsNow) failedOnce.add(media[1]);
+    if (media && (PAGES[media[1]]?.media === "missing" || failsNow)) {
+      res.statusCode = 404;
+      res.end("not found");
+      return;
+    }
+    if (media && PAGES[media[1]]?.media === "cut") {
+      void sendFile(res, join(mediaDir, CLIP), undefined, 0.5);
+      return;
+    }
     if (media && PAGES[media[1]]) {
       const rate = Number(url.searchParams.get("rate")) || undefined;
       void sendFile(res, join(mediaDir, CLIP), rate);
@@ -175,7 +194,8 @@ const CONTENT_TYPES: Record<string, string> = {
   m4s: "video/iso.segment",
 };
 
-async function sendFile(res: ServerResponse, file: string, rate?: number) {
+/** `cutAt` (Anteil 0–1) schickt nur den Anfang und trennt dann die Verbindung, trotz voller `content-length`. */
+async function sendFile(res: ServerResponse, file: string, rate?: number, cutAt?: number) {
   const size = await stat(file).then((s) => s.size, () => undefined);
   if (size === undefined) {
     res.statusCode = 404;
@@ -184,6 +204,12 @@ async function sendFile(res: ServerResponse, file: string, rate?: number) {
   }
   res.setHeader("content-length", size);
   res.setHeader("content-type", CONTENT_TYPES[file.split(".").pop() ?? ""] ?? "application/octet-stream");
+  if (cutAt !== undefined) {
+    createReadStream(file, { end: Math.floor(size * cutAt) - 1 })
+      .on("end", () => res.socket?.destroy())
+      .pipe(res, { end: false });
+    return;
+  }
   if (!rate) {
     createReadStream(file).pipe(res);
     return;

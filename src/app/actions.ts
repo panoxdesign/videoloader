@@ -13,7 +13,7 @@ import { duplicateKey, type Duplicate } from "@/server/duplicate";
 import { deleteDoneEntry } from "@/server/files/media-file";
 import { BUNDLED_YTDLP, dataDirFromEnv, dataPaths } from "@/server/paths";
 import { enqueuePlaylist, openPreview } from "@/server/playlist-preview";
-import { enqueue, findDuplicateEntry, queuePosition } from "@/server/queue";
+import { enqueue, findDuplicateEntry, queuePosition, removeEntry, retryEntry } from "@/server/queue";
 
 /** Die Duplikat-Warnung, mit dem vorhandenen Eintrag. */
 export type DuplicateWarning = {
@@ -116,5 +116,19 @@ export async function addPlaylistEntries(key: string, numbers: number[]): Promis
 export async function deleteEntry(id: number) {
   if (!Number.isSafeInteger(id)) return;
   await deleteDoneEntry(getDb(), dataPaths(dataDirFromEnv()).downloads, id);
+  refresh();
+}
+
+/** „Retry“: ein fehlgeschlagener oder abgebrochener Eintrag kommt wartend ans Ende der Queue. */
+export async function retryQueueEntry(id: number) {
+  if (!Number.isSafeInteger(id)) return;
+  retryEntry(getDb(), id, Date.now());
+  refresh();
+}
+
+/** „Remove“ ohne Rückfrage, für wartende, fehlgeschlagene und abgebrochene Einträge. */
+export async function removeQueueEntry(id: number) {
+  if (!Number.isSafeInteger(id)) return;
+  removeEntry(getDb(), id);
   refresh();
 }
