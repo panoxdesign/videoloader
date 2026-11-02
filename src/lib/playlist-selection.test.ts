@@ -1,12 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { initialSelection, largeSelectionHint, selectAllState, toggleAll, toggleItem, type PreviewItem } from "./playlist-selection";
+import {
+  initialSelection,
+  isSelectable,
+  largeSelectionHint,
+  selectAllState,
+  toggleAll,
+  toggleItem,
+  type PreviewItem,
+} from "./playlist-selection";
 
 const item = (number: number, duplicate?: PreviewItem["duplicate"]): PreviewItem => ({ number, duplicate });
+const live = (number: number, block: NonNullable<PreviewItem["live"]> = "live"): PreviewItem => ({ number, live: block });
 
 describe("initialSelection", () => {
   it("selects every item except duplicates", () => {
     const items = [item(1), item(2, "downloaded"), item(3), item(4, "queued")];
     expect([...initialSelection(items)]).toEqual([1, 3]);
+  });
+
+  it("leaves out streams that are live, upcoming or just ended", () => {
+    const items = [item(1), live(2), live(3, "upcoming"), live(4, "justEnded"), item(5)];
+    expect([...initialSelection(items)]).toEqual([1, 5]);
   });
 });
 
@@ -26,6 +40,15 @@ describe("selectAllState", () => {
   it("is none for an empty playlist", () => {
     expect(selectAllState(new Set(), [])).toBe("none");
   });
+
+  it("is all when every selectable entry is ticked, streams do not count", () => {
+    const items = [item(1), live(2), item(3)];
+    expect(selectAllState(initialSelection(items), items)).toBe("all");
+  });
+
+  it("is none when only streams are left", () => {
+    expect(selectAllState(new Set(), [live(1), live(2, "upcoming")])).toBe("none");
+  });
 });
 
 describe("toggleAll", () => {
@@ -41,6 +64,21 @@ describe("toggleAll", () => {
 
   it("clears everything from all", () => {
     expect([...toggleAll(new Set([1, 2, 3]), items)]).toEqual([]);
+  });
+
+  it("never selects streams", () => {
+    const withLive = [item(1), live(2), item(3, "queued"), live(4, "upcoming")];
+    expect([...toggleAll(new Set(), withLive)].sort()).toEqual([1, 3]);
+    expect([...toggleAll(new Set([1, 3]), withLive)]).toEqual([]);
+  });
+});
+
+describe("isSelectable", () => {
+  it("is true for normal entries and duplicates, false for streams", () => {
+    expect(isSelectable(item(1))).toBe(true);
+    expect(isSelectable(item(1, "downloaded"))).toBe(true);
+    expect(isSelectable(live(1))).toBe(false);
+    expect(isSelectable(live(1, "justEnded"))).toBe(false);
   });
 });
 

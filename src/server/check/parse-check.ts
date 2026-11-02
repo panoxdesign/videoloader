@@ -1,3 +1,5 @@
+import { parseLiveStatus, type LiveStatus } from "@/lib/live";
+
 /** Was die Prüfung über ein Medium weiß. Je nach Quelle fehlen Felder, keins ist Pflicht. */
 export type CheckedMedia = {
   /** Quelle, der `extractor_key` von yt-dlp. */
@@ -7,6 +9,8 @@ export type CheckedMedia = {
   thumbnailUrl: string | null;
   /** In Sekunden, kann Nachkommastellen haben. */
   duration: number | null;
+  /** Nur zur Entscheidung beim Hinzufügen, nicht im Queue-Eintrag. Fehlt bei vielen Quellen. */
+  liveStatus: LiveStatus | null;
 };
 
 /** Titel und Medien-ID, wie yt-dlp sie für Dateinamen bereinigt (`%(…)S` mit `--windows-filenames`). */
@@ -87,6 +91,7 @@ function media(raw: Raw, source: string | null): CheckedMedia {
     title: string(raw.title),
     thumbnailUrl: thumbnail(raw),
     duration: typeof raw.duration === "number" && raw.duration > 0 ? raw.duration : null,
+    liveStatus: parseLiveStatus(raw.live_status),
   };
 }
 

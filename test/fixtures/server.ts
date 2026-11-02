@@ -94,6 +94,22 @@ export async function startFixtureServer(options: {
       return;
     }
 
+    // Ein laufender Livestream: HLS ohne `#EXT-X-ENDLIST`. yt-dlp meldet ihn als `live_status: is_live`
+    // und würde ihn ewig aufnehmen. Segmente gibt es nicht, die App darf ihn gar nicht erst laden.
+    if (url.pathname === "/live/stream.m3u8") {
+      res.setHeader("content-type", "application/vnd.apple.mpegurl");
+      res.end(`#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:2
+#EXT-X-MEDIA-SEQUENCE:100
+#EXTINF:2.0,
+seg100.ts
+#EXTINF:2.0,
+seg101.ts
+`);
+      return;
+    }
+
     // DASH als <video>-Quelle. yt-dlp nummeriert solche Quellen, ID und Titel
     // lauten deshalb „clip-dash-1“ und „Clip Dash (1)“.
     if (url.pathname === "/videos/clip-dash") {

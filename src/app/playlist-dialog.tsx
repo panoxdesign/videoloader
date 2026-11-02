@@ -13,8 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import type { LiveBlock } from "@/lib/live";
 import {
   initialSelection,
+  isSelectable,
   largeSelectionHint,
   selectAllState,
   toggleAll,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/playlist-selection";
 import { formatDuration, mediaLabel } from "@/lib/queue-view";
 import { texts } from "@/lib/texts";
+import { cn } from "@/lib/utils";
 import { addPlaylistEntries } from "./actions";
 
 /** Was der Playlist-Dialog gerade zeigt. */
@@ -134,6 +137,7 @@ function PreviewDialog({
   const all = selectAllState(selection, view.items);
   const count = view.items.filter((item) => selection.has(item.number)).length;
   const hint = largeSelectionHint(count, view.startIntervalSeconds);
+  const noneSelectable = !view.items.some(isSelectable);
 
   const add = () =>
     startTransition(async () => {
@@ -153,48 +157,63 @@ function PreviewDialog({
           </DialogDescription>
         </div>
 
-        <label className="flex min-h-11 cursor-pointer items-center gap-3 border-y border-border px-6 font-semibold">
+        <label
+          className={cn(
+            "flex min-h-11 items-center gap-3 border-y border-border px-6 font-semibold",
+            noneSelectable ? "text-foreground-secondary" : "cursor-pointer",
+          )}
+        >
           <Checkbox
             checked={all === "all"}
             indeterminate={all === "mixed"}
+            disabled={noneSelectable}
             onCheckedChange={() => setSelection((current) => toggleAll(current, view.items))}
           />
           {texts.playlist.selectAll}
         </label>
 
         <ul className="min-h-0 flex-1 overflow-y-auto px-3 py-1" aria-label={texts.playlist.entries}>
-          {view.items.map((item) => (
-            <li key={item.number}>
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-3 py-2 hover:bg-muted">
-                <Checkbox
-                  checked={selection.has(item.number)}
-                  onCheckedChange={() => setSelection((current) => toggleItem(current, item.number))}
-                />
-                {/* Der schraffierte Platzhalter steht da, bis das Bild geladen ist, und ohne Bild. */}
-                <span aria-hidden className="h-9 w-16 flex-none overflow-hidden rounded-sm bg-muted bg-hatch">
-                  {item.thumbnailUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={item.thumbnailUrl}
-                      alt=""
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      className="size-full object-cover"
-                    />
+          {view.items.map((item) => {
+            const selectable = isSelectable(item);
+            return (
+              <li key={item.number}>
+                <label
+                  className={cn(
+                    "flex min-h-11 items-center gap-3 rounded-md px-3 py-2",
+                    selectable ? "cursor-pointer hover:bg-muted" : "text-foreground-secondary",
                   )}
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                  <span className="font-medium [overflow-wrap:anywhere]">{item.title ?? item.url}</span>
-                  {item.duration !== null && (
-                    <span className="text-xs text-foreground-secondary tabular-nums">{formatDuration(item.duration)}</span>
-                  )}
-                  {/* Mobil unter dem Titel, sonst bliebe für ihn kaum Platz. */}
-                  {item.duplicate && <DuplicateBadge kind={item.duplicate} className="sm:hidden" />}
-                </span>
-                {item.duplicate && <DuplicateBadge kind={item.duplicate} className="flex-none max-sm:hidden" />}
-              </label>
-            </li>
-          ))}
+                >
+                  <Checkbox
+                    checked={selectable && selection.has(item.number)}
+                    disabled={!selectable}
+                    onCheckedChange={() => setSelection((current) => toggleItem(current, item.number))}
+                  />
+                  {/* Der schraffierte Platzhalter steht da, bis das Bild geladen ist, und ohne Bild. */}
+                  <span aria-hidden className="h-9 w-16 flex-none overflow-hidden rounded-sm bg-muted bg-hatch">
+                    {item.thumbnailUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.thumbnailUrl}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="size-full object-cover"
+                      />
+                    )}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                    <span className="font-medium [overflow-wrap:anywhere]">{item.title ?? item.url}</span>
+                    {item.duration !== null && (
+                      <span className="text-xs text-foreground-secondary tabular-nums">{formatDuration(item.duration)}</span>
+                    )}
+                    {/* Mobil unter dem Titel, sonst bliebe für ihn kaum Platz. */}
+                    <ItemBadge item={item} className="sm:hidden" />
+                  </span>
+                  <ItemBadge item={item} className="flex-none max-sm:hidden" />
+                </label>
+              </li>
+            );
+          })}
         </ul>
 
         {hint && (
@@ -226,10 +245,25 @@ function PreviewDialog({
   );
 }
 
-function DuplicateBadge({ kind, className }: { kind: "downloaded" | "queued"; className?: string }) {
+const LIVE_BADGES: Record<LiveBlock, string> = {
+  live: texts.playlist.live,
+  upcoming: texts.playlist.upcoming,
+  justEnded: texts.playlist.justEnded,
+};
+
+/** Höchstens ein Badge je Eintrag. Ein Stream ist nicht auswählbar, das wiegt schwerer als ein Duplikat. */
+function ItemBadge({ item, className }: { item: PreviewView["items"][number]; className?: string }) {
+  if (item.live) {
+    return (
+      <Badge variant="neutral" className={className}>
+        {LIVE_BADGES[item.live]}
+      </Badge>
+    );
+  }
+  if (!item.duplicate) return null;
   return (
-    <Badge variant={kind === "downloaded" ? "success" : "info"} className={className}>
-      {kind === "downloaded" ? texts.playlist.alreadyDownloaded : texts.playlist.alreadyInQueue}
+    <Badge variant={item.duplicate === "downloaded" ? "success" : "info"} className={className}>
+      {item.duplicate === "downloaded" ? texts.playlist.alreadyDownloaded : texts.playlist.alreadyInQueue}
     </Badge>
   );
 }

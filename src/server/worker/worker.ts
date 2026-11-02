@@ -4,6 +4,7 @@ import { lstatSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { createInterface } from "node:readline";
+import { liveBlock } from "@/lib/live";
 import { parseMedia } from "@/lib/media";
 import { CHECK_TIMEOUT_MS, checkLink } from "../check/check";
 import type { Db, Tx } from "../db/open";
@@ -157,7 +158,9 @@ function needsNaming(entry: QueueEntry) {
 
 /**
  * Prüft den Link eines Playlist-Eintrags wie „Add“, übernimmt Quelle, Medien-ID, Titel und
- * Dateinamen-Teile und reserviert dann den Namen. Scheitert die Prüfung, wirft es.
+ * Dateinamen-Teile und reserviert dann den Namen. Scheitert die Prüfung, wirft es. Auch bei einem
+ * Stream: Flat-Einträge fremder Quellen tragen oft kein `live_status`, erst diese Prüfung zeigt ihn.
+ * Ohne den Abbruch nähme yt-dlp auf, bis der Stream endet (Ticket 38).
  */
 async function completeNaming({ db, ytDlpPath, dataDir }: WorkerDeps, entry: QueueEntry) {
   const paths = dataPaths(dataDir);
@@ -169,6 +172,7 @@ async function completeNaming({ db, ytDlpPath, dataDir }: WorkerDeps, entry: Que
   });
   if (result.kind !== "video") throw new Error(`check before start found ${result.kind === "none" ? "nothing" : "a playlist"}`);
   const { media } = result;
+  if (liveBlock(media.liveStatus)) throw new Error(`check before start found a stream (${media.liveStatus})`);
   return db.transaction((tx) => {
     const checked = {
       source: media.source ?? entry.source,

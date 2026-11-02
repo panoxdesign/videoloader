@@ -42,6 +42,48 @@ for (const [name, link] of [
   });
 }
 
+for (const link of [
+  "https://www.youtube.com/watch?list=RDdQw4w9WgXcQ",
+  "https://www.youtube.com/playlist?list=RDdQw4w9WgXcQ",
+  "https://music.youtube.com/watch?list=RDAMVMdQw4w9WgXcQ",
+]) {
+  test(`a whole Mix is refused without a preview: ${link}`, async ({ page }) => {
+    // Ein Mix darf weder die Vorschau laden noch yt-dlp erreichen. yt-dlp hieße „No downloadable media“.
+    const previews: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/api/playlist-preview")) previews.push(request.url());
+    });
+    await page.goto("/");
+    const form = page.getByRole("form", { name: "Add a download" });
+    const field = form.getByRole("textbox", { name: "Link" });
+
+    await field.fill(link);
+    await form.getByRole("button", { name: "Add", exact: true }).click();
+
+    await expect(form.getByRole("alert")).toHaveText(
+      "YouTube Mixes can't be downloaded. Add a single video from the Mix instead.",
+    );
+    await expect(field).toHaveValue(link);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(previews).toEqual([]);
+  });
+}
+
+test("a running live stream is refused and adds nothing", async ({ page }) => {
+  // HLS ohne Ende: yt-dlp meldet `is_live` und nähme auf, bis der Stream endet.
+  const link = `${fixtureUrl}/live/stream.m3u8`;
+  await page.goto("/");
+  const form = page.getByRole("form", { name: "Add a download" });
+  const field = form.getByRole("textbox", { name: "Link" });
+
+  await field.fill(link);
+  await form.getByRole("button", { name: "Add", exact: true }).click();
+
+  await expect(form.getByRole("alert")).toHaveText("Live streams can't be downloaded.");
+  await expect(field).toHaveValue(link);
+  await expect(page.getByRole("listitem").filter({ hasText: "stream" })).toHaveCount(0);
+});
+
 test("a double click on Add creates one entry", async ({ page }) => {
   await page.goto("/");
   const form = page.getByRole("form", { name: "Add a download" });

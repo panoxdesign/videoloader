@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { CHECK_TIMEOUT_MS, checkLink } from "./check/check";
 import { eq, lte } from "drizzle-orm";
+import { liveBlock } from "@/lib/live";
 import type { Media } from "@/lib/media";
 import type { PreviewView } from "@/lib/playlist-selection";
 import type { CheckResult, PlaylistEntry } from "./check/parse-check";
@@ -54,7 +55,10 @@ export function takePreview(db: Db | Tx, key: string, now: number) {
   return row && row.expiresAt > now ? (row.data as PlaylistPreview) : undefined;
 }
 
-/** Legt die Vorschau ab und markiert Duplikate je Eintrag. Einträge ohne Medien-ID werden nie markiert. */
+/**
+ * Legt die Vorschau ab und markiert Duplikate je Eintrag. Einträge ohne Medien-ID werden nie markiert.
+ * Laufende, angekündigte und gerade beendete Streams markiert `live`, der Dialog sperrt sie.
+ */
 export async function openPreview(
   db: Db,
   downloadsDir: string,
@@ -65,9 +69,10 @@ export async function openPreview(
 ): Promise<PreviewView> {
   const { key, preview } = storePreview(db, media, playlist, now);
   const items = await Promise.all(
-    preview.entries.map(async ({ number, url, title, duration, thumbnailUrl, source, mediaId }) => {
+    preview.entries.map(async ({ number, url, title, duration, thumbnailUrl, source, mediaId, liveStatus }) => {
       const duplicate = await findDuplicateEntry(db, downloadsDir, { source, mediaId, mediaType: media.mediaType });
-      return { number, url, title, duration, thumbnailUrl, ...(duplicate && { duplicate: duplicate.kind }) };
+      const live = liveBlock(liveStatus);
+      return { number, url, title, duration, thumbnailUrl, ...(duplicate && { duplicate: duplicate.kind }), ...(live && { live }) };
     }),
   );
   return { key, title: preview.title, media, startIntervalSeconds, items };
@@ -76,14 +81,15 @@ export async function openPreview(
 /**
  * „Add x to queue“: löst den Schlüssel ein und reiht die angehakten Nummern in Playlist-Reihenfolge
  * ein, in einer Transaktion. Titel, IDs und Ordner kommen aus dem Zwischenspeicher, nie aus dem
- * Browser. Unbekannte Nummern zählen nicht.
+ * Browser. Unbekannte Nummern zählen nicht, Streams auch nicht: Der Dialog sperrt sie, aber dem
+ * Browser wird nicht getraut (Ticket 38).
  */
 export function enqueuePlaylist(db: Db, key: string, numbers: readonly number[], now: number) {
   return db.transaction((tx) => {
     const preview = takePreview(tx, key, now);
     if (!preview) return { kind: "expired" as const };
     const ticked = new Set(numbers);
-    const chosen = preview.entries.filter((entry) => ticked.has(entry.number));
+    const chosen = preview.entries.filter((entry) => ticked.has(entry.number) && !liveBlock(entry.liveStatus ?? null));
     for (const { number, url, ...checked } of chosen) {
       enqueue(tx, url, preview.media, now, {
         ...checked,

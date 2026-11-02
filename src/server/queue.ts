@@ -9,14 +9,11 @@ import { findMediaFile } from "./files/media-file";
 /** Was ein Eintrag aus einer Playlist zusätzlich trägt. */
 export type PlaylistPlacement = Pick<QueueEntry, "playlistTitle" | "playlistFolder" | "playlistNumber">;
 
+/** Was ein Queue-Eintrag aus der Prüfung übernimmt. `liveStatus` zählt nur beim Hinzufügen. */
+export type CheckedForQueue = Omit<CheckedMedia, "liveStatus"> & Partial<FileNaming> & Partial<PlaylistPlacement>;
+
 /** Legt einen wartenden Queue-Eintrag an, mit dem, was die Link-Prüfung schon über das Medium weiß. */
-export function enqueue(
-  db: Db | Tx,
-  url: string,
-  media: Media,
-  now: number,
-  checked?: CheckedMedia & Partial<FileNaming> & Partial<PlaylistPlacement>,
-) {
+export function enqueue(db: Db | Tx, url: string, media: Media, now: number, checked?: CheckedForQueue) {
   return db
     .insert(queueEntries)
     .values({ url, ...checked, ...media, state: "waiting", queuedAt: now })

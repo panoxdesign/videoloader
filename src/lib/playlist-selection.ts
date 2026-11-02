@@ -1,3 +1,4 @@
+import type { LiveBlock } from "./live";
 import type { Media } from "./media";
 import { texts } from "./texts";
 
@@ -7,6 +8,8 @@ export type PreviewItem = {
   number: number;
   /** Duplikat-Badge: „Already downloaded“ bzw. „Already in queue“. */
   duplicate?: "downloaded" | "queued";
+  /** Laufender, angekündigter oder gerade beendeter Stream: mit Badge, nicht auswählbar (Ticket 38). */
+  live?: LiveBlock;
 };
 
 /** Was der Playlist-Dialog im Browser bekommt. Titel und IDs für Dateinamen bleiben auf dem Server. */
@@ -23,21 +26,29 @@ export type PreviewView = {
 /** Die angehakten Nummern. */
 export type Selection = ReadonlySet<number>;
 
-/** Alle sind angehakt, außer Duplikaten. Wer ein Duplikat anhakt, wählt damit „Add anyway“. */
+/** Streams lassen sich nicht anhaken, weder einzeln noch über „Select all“. Duplikate schon. */
+export function isSelectable(item: PreviewItem) {
+  return !item.live;
+}
+
+/** Alle sind angehakt, außer Duplikaten und Streams. Wer ein Duplikat anhakt, wählt damit „Add anyway“. */
 export function initialSelection(items: readonly PreviewItem[]): Selection {
-  return new Set(items.filter((item) => !item.duplicate).map((item) => item.number));
+  return new Set(items.filter((item) => isSelectable(item) && !item.duplicate).map((item) => item.number));
 }
 
-/** Zustand der Checkbox „Select all“. */
+/** Zustand der Checkbox „Select all“. Gezählt werden nur auswählbare Einträge. */
 export function selectAllState(selection: Selection, items: readonly PreviewItem[]): "all" | "none" | "mixed" {
-  const selected = items.filter((item) => selection.has(item.number)).length;
+  const selectable = items.filter(isSelectable);
+  const selected = selectable.filter((item) => selection.has(item.number)).length;
   if (selected === 0) return "none";
-  return selected === items.length ? "all" : "mixed";
+  return selected === selectable.length ? "all" : "mixed";
 }
 
-/** Klick auf „Select all“: Aus „alle“ wird „keine“, sonst werden alle angehakt, auch Duplikate. */
+/** Klick auf „Select all“: Aus „alle“ wird „keine“, sonst werden alle auswählbaren angehakt, auch Duplikate. */
 export function toggleAll(selection: Selection, items: readonly PreviewItem[]): Selection {
-  return selectAllState(selection, items) === "all" ? new Set() : new Set(items.map((item) => item.number));
+  return selectAllState(selection, items) === "all"
+    ? new Set()
+    : new Set(items.filter(isSelectable).map((item) => item.number));
 }
 
 /** Klick auf die Checkbox eines Eintrags. */

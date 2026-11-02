@@ -1,7 +1,9 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { isUpcomingError, liveError } from "@/lib/live";
 import { parseMedia, type MediaType, type Resolution } from "@/lib/media";
+import { isMixLink } from "@/lib/playlist-link";
 import type { PreviewView } from "@/lib/playlist-selection";
 import { texts } from "@/lib/texts";
 import { CHECK_TIMEOUT_MS, checkLink } from "@/server/check/check";
@@ -44,12 +46,14 @@ export type AddState = {
 /**
  * Prüft den Link mit yt-dlp und reiht ein Einzelvideo ein. Ein Duplikat ergibt erst eine Warnung.
  * Ist der Link doch eine Playlist (Quelle unbekannt, etwa ein RSS-Feed), öffnet sich der Dialog
- * direkt, ohne abbrechbares Laden.
+ * direkt, ohne abbrechbares Laden. Ganze Mixe lehnt sie ohne yt-dlp ab, laufende, angekündigte und
+ * gerade beendete Streams nach der Prüfung (Ticket 38).
  */
 export async function addEntry(_previous: AddState, formData: FormData): Promise<AddState> {
   const url = String(formData.get("url") ?? "").trim();
   const media = parseMedia({ mediaType: formData.get("mediaType"), resolution: formData.get("resolution") });
   if (!url || !media) return { url, error: texts.addForm.noMedia };
+  if (isMixLink(url)) return { url, error: texts.addForm.mix };
 
   const paths = dataPaths(dataDirFromEnv());
   const result = await checkLink({
@@ -62,7 +66,9 @@ export async function addEntry(_previous: AddState, formData: FormData): Promise
   if (result.kind === "playlist") {
     return { url, preview: await openPreview(getDb(), paths.downloads, media, result, Date.now()) };
   }
-  if (result.kind === "none") return { url, error: texts.addForm.noMedia };
+  if (result.kind === "none") return { url, error: isUpcomingError(result.error) ? texts.addForm.live : texts.addForm.noMedia };
+  const liveProblem = liveError(result.media.liveStatus);
+  if (liveProblem) return { url, error: liveProblem };
 
   const db = getDb();
   const identity = { ...result.media, mediaType: media.mediaType };

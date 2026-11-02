@@ -22,6 +22,12 @@ export const texts = {
     add: "Add",
     checking: "Checking…",
     noMedia: "No downloadable media found at this link.",
+    /** Ganzer YouTube-Mix, ohne yt-dlp abgelehnt. */
+    mix: "YouTube Mixes can't be downloaded. Add a single video from the Mix instead.",
+    /** Laufender oder angekündigter Stream (`is_live`, `is_upcoming`). */
+    live: "Live streams can't be downloaded.",
+    /** `post_live`: Der Stream ist vorbei, YouTube verarbeitet die Aufzeichnung noch. */
+    justEnded: "This stream just ended. Try again later.",
   },
   playlist: {
     loading: "Loading playlist…",
@@ -38,6 +44,10 @@ export const texts = {
     add: (count: number) => `Add ${count} to queue`,
     alreadyDownloaded: "Already downloaded",
     alreadyInQueue: "Already in queue",
+    /** Badges für Einträge, die sich nicht auswählen lassen (Ticket 38). */
+    live: "Live",
+    upcoming: "Upcoming",
+    justEnded: "Just ended",
     errorTitle: "Can't preview playlist",
     timedOut: "Playlist too large to preview (timed out)",
     /** Server lehnt ab (etwa 403 hinter falsch eingerichtetem Proxy), Netzfehler, keine JSON-Antwort. */

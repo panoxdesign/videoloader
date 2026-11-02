@@ -20,6 +20,7 @@ const entry = (page: string, title: string) => ({
   title,
   thumbnailUrl: null,
   duration: null,
+  liveStatus: null,
   fileTitle: title,
   fileMediaId: null,
 });
@@ -79,6 +80,7 @@ describe("openPreview", () => {
     title,
     thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
     duration: 312,
+    liveStatus: null,
     fileTitle: title,
     fileMediaId: id,
   });
@@ -115,6 +117,22 @@ describe("openPreview", () => {
       [3, undefined],
       [4, undefined],
     ]);
+  });
+
+  it("marks live, upcoming and just ended streams, but not recordings of past streams", async () => {
+    const { db, downloads } = await setup();
+    const streams: Playlist = {
+      ...playlist,
+      entries: [
+        { ...youtube("a", "Live"), liveStatus: "is_live" },
+        { ...youtube("b", "Soon"), liveStatus: "is_upcoming" },
+        { ...youtube("c", "Ended"), liveStatus: "post_live" },
+        { ...youtube("d", "Recording"), liveStatus: "was_live" },
+        youtube("e", "Video"),
+      ],
+    };
+    const view = await openPreview(db, downloads, VIDEO, streams, 10);
+    expect(view.items.map((item) => item.live)).toEqual(["live", "upcoming", "justEnded", undefined, undefined]);
   });
 
   it("counts duplicates only in the same media type", async () => {
@@ -183,6 +201,22 @@ describe("enqueuePlaylist", () => {
     const { key: late } = storePreview(db, VIDEO, three, 1_000);
     expect(enqueuePlaylist(db, late, [2], 1_000 + PREVIEW_LIFETIME_MS)).toEqual({ kind: "expired" });
     expect(listEntries(db)).toHaveLength(1);
+  });
+
+  it("never adds live, upcoming or just ended streams, even when the browser sends their numbers", async () => {
+    const { db } = await tempDb();
+    const streams: Playlist = {
+      ...PLAYLIST,
+      entries: [
+        { ...entry("clip-one", "Live"), liveStatus: "is_live" },
+        { ...entry("clip-two", "Upcoming"), liveStatus: "is_upcoming" },
+        { ...entry("clip-three", "Just Ended"), liveStatus: "post_live" },
+        { ...entry("clip-four", "Recording"), liveStatus: "was_live" },
+      ],
+    };
+    const { key } = storePreview(db, VIDEO, streams, 1_000);
+    expect(enqueuePlaylist(db, key, [1, 2, 3, 4], 2_000)).toEqual({ kind: "added", count: 1 });
+    expect(listEntries(db).map((e) => e.title)).toEqual(["Recording"]);
   });
 
   it("ignores numbers that are not in the preview", async () => {

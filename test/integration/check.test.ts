@@ -20,6 +20,7 @@ describe("link check", () => {
         title: "Clip One",
         thumbnailUrl: `${fixtureUrl}/media/clip.jpg`,
         duration: null,
+        liveStatus: null,
         fileTitle: "Clip One",
         fileMediaId: "clip-one",
       },
@@ -36,6 +37,10 @@ describe("link check", () => {
     });
   });
 
+  it("knows a running live stream", async () => {
+    expect(await check(`${fixtureUrl}/live/stream.m3u8`)).toMatchObject({ kind: "video", media: { liveStatus: "is_live" } });
+  });
+
   it("reads an RSS feed as a playlist with flat entries and the folder name as yt-dlp cleans it", async () => {
     const entry = (page: string, title: string) => ({
       url: `${fixtureUrl}/videos/${page}`,
@@ -44,6 +49,7 @@ describe("link check", () => {
       title,
       thumbnailUrl: null,
       duration: null,
+      liveStatus: null,
       fileTitle: title,
       fileMediaId: null,
     });

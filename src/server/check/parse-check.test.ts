@@ -30,6 +30,7 @@ describe("parseCheck", () => {
         title: "Clip One",
         thumbnailUrl: "http://fixtures:8080/media/clip.jpg",
         duration: null,
+        liveStatus: null,
         fileTitle: "Clip One",
         fileMediaId: "clip-one",
       },
@@ -72,10 +73,21 @@ describe("parseCheck", () => {
     expect(parseCheck(stdout)).toMatchObject({ kind: "video", media: { thumbnailUrl: null } });
   });
 
+  it("reads the live status of a video", () => {
+    // So kam `@NASA/live` bei der Prüfung am 2026-11-01: als Video, ohne Dauer.
+    const stdout = json({ _type: "video", extractor_key: "Youtube", id: "21X5lGlDOfg", is_live: true, live_status: "is_live" });
+    expect(parseCheck(stdout)).toMatchObject({ kind: "video", media: { liveStatus: "is_live", duration: null } });
+  });
+
+  it("ignores a live status it does not know", () => {
+    const stdout = json({ _type: "video", extractor_key: "Youtube", id: "x", live_status: "is_premiere" });
+    expect(parseCheck(stdout)).toMatchObject({ kind: "video", media: { liveStatus: null } });
+  });
+
   it("allows a video without id, title and thumbnail", () => {
     expect(parseCheck(json({ _type: "video" }))).toEqual({
       kind: "video",
-      media: { source: null, mediaId: null, title: null, thumbnailUrl: null, duration: null, fileTitle: null, fileMediaId: null },
+      media: { source: null, mediaId: null, title: null, thumbnailUrl: null, duration: null, liveStatus: null, fileTitle: null, fileMediaId: null },
     });
   });
 
@@ -111,10 +123,29 @@ describe("parseCheck", () => {
           title: "How Rockets Land Themselves",
           thumbnailUrl: "https://i.ytimg.com/vi/abc/hqdefault.jpg",
           duration: 312,
+          liveStatus: null,
           fileTitle: "How Rockets Land Themselves",
           fileMediaId: "abc",
         },
       ],
+    });
+  });
+
+  it("reads the live status of flat entries", () => {
+    // Auszug aus `@NASA/streams` mit `--flat-playlist`: Jeder Eintrag trägt `live_status`.
+    const stdout = json({
+      _type: "playlist",
+      extractor_key: "YoutubeTab",
+      id: "UC_streams",
+      entries: [
+        { _type: "url", ie_key: "Youtube", id: "a", url: "https://www.youtube.com/watch?v=a", live_status: "is_live" },
+        { _type: "url", ie_key: "Youtube", id: "b", url: "https://www.youtube.com/watch?v=b", live_status: "was_live" },
+        { _type: "url", ie_key: "Youtube", id: "c", url: "https://www.youtube.com/watch?v=c" },
+      ],
+    });
+    expect(parseCheck(stdout)).toMatchObject({
+      kind: "playlist",
+      entries: [{ liveStatus: "is_live" }, { liveStatus: "was_live" }, { liveStatus: null }],
     });
   });
 

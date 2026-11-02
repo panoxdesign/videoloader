@@ -41,8 +41,12 @@ Ein Link auf ein einzelnes Medium, der zusätzlich eine Playlist nennt, bei YouT
 _Avoid_: Playlist-Link (meint die reine Playlist)
 
 **Mix**:
-Eine Liste, die YouTube zu einem Medium erzeugt (`list` beginnt mit `RD`). Sie ist bei jedem Aufruf anders und enthält Wiederholungen. Die App behandelt sie nicht als Playlist. Alben auf YouTube Music (`RDCLAK…`) sind zwar feste Listen, fallen aber unter dieselbe Regel und werden nicht unterstützt.
+Eine Liste, die YouTube zu einem Medium erzeugt (`list` beginnt mit `RD`). Sie ist bei jedem Aufruf anders und enthält Wiederholungen. Die App behandelt sie nicht als Playlist: Ein Link auf den ganzen Mix (ohne Video) lehnt „Add“ ab, ein Video aus einem Mix wird als Einzelvideo eingereiht. Alben auf YouTube Music (`RDCLAK…`) sind zwar feste Listen, fallen aber unter dieselbe Regel und werden nicht unterstützt.
 _Avoid_: Radio, Automix
+
+**Livestream**:
+Ein Medium, das gerade läuft, angekündigt ist oder eben erst endete, laut yt-dlp `live_status` `is_live`, `is_upcoming` oder `post_live`. „Add“ lehnt es ab, in der Playlist-Vorschau ist es gesperrt. Die Aufzeichnung eines beendeten Streams (`was_live`) ist ein normales Medium.
+_Avoid_: Stream (allein, mehrdeutig mit Video- und Audiospur)
 
 **Mediendatei**:
 Die fertige heruntergeladene Datei eines Queue-Eintrags, die auf dem Server liegt und über die App abrufbar ist. Jede Mediendatei gehört zu genau einem Queue-Eintrag.

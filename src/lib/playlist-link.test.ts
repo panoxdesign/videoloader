@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMixedLink, isPlaylistLink } from "./playlist-link";
+import { isMixedLink, isMixLink, isPlaylistLink } from "./playlist-link";
 
 describe("isPlaylistLink", () => {
   it("recognizes a YouTube playlist page", () => {
@@ -29,6 +29,41 @@ describe("isPlaylistLink", () => {
     expect(isPlaylistLink("https://example.com/playlist?list=PLabc123")).toBe(false);
     expect(isPlaylistLink("http://fixtures:8080/feed.rss")).toBe(false);
     expect(isPlaylistLink("https://notyoutube.com/playlist?list=PLabc123")).toBe(false);
+  });
+
+  it("leaves a whole Mix out, it is rejected without yt-dlp", () => {
+    expect(isPlaylistLink("https://www.youtube.com/watch?list=RDdQw4w9WgXcQ")).toBe(false);
+    expect(isPlaylistLink("https://www.youtube.com/playlist?list=RDdQw4w9WgXcQ")).toBe(false);
+    expect(isPlaylistLink("https://music.youtube.com/watch?list=RDAMVMdQw4w9WgXcQ")).toBe(false);
+  });
+});
+
+describe("isMixLink", () => {
+  it.each([
+    "https://www.youtube.com/watch?list=RDdQw4w9WgXcQ",
+    "https://www.youtube.com/playlist?list=RDdQw4w9WgXcQ",
+    "https://youtube.com/watch?list=RDdQw4w9WgXcQ&start_radio=1",
+    "https://m.youtube.com/playlist?list=RDdQw4w9WgXcQ",
+    "https://music.youtube.com/watch?list=RDAMVMdQw4w9WgXcQ",
+    "https://music.youtube.com/playlist?list=RDCLAK5uy_abc",
+  ])("recognizes a whole Mix: %s", (link) => {
+    expect(isMixLink(link)).toBe(true);
+  });
+
+  it.each([
+    ["a video from a Mix", "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ"],
+    ["a video from a Mix as a short link", "https://youtu.be/dQw4w9WgXcQ?list=RDdQw4w9WgXcQ"],
+    ["a video from a music Mix", "https://music.youtube.com/watch?v=dQw4w9WgXcQ&list=RDAMVMdQw4w9WgXcQ"],
+    ["a playlist", "https://www.youtube.com/playlist?list=PLabc123"],
+    ["the uploads of a channel", "https://www.youtube.com/playlist?list=UUSMOQeBJ2RAnuFungnQOxLg"],
+    ["a list on the watch page", "https://www.youtube.com/watch?list=PLabc123"],
+    ["an empty list", "https://www.youtube.com/watch?list="],
+    ["a Mix id on another page", "https://www.youtube.com/channel/RDabc?list=RDabc"],
+    ["another source with the same path", "https://example.com/watch?list=RDdQw4w9WgXcQ"],
+    ["a host that only ends like YouTube", "https://notyoutube.com/playlist?list=RDdQw4w9WgXcQ"],
+    ["text that is not a link", "not a link"],
+  ])("is false for %s", (_, link) => {
+    expect(isMixLink(link)).toBe(false);
   });
 });
 

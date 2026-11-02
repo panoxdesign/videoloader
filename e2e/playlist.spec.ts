@@ -125,6 +125,55 @@ test("duplicates in the preview carry a badge and start unchecked", async ({ pag
   await expect(page.getByRole("listitem").filter({ hasText: "Mocked Mix" })).toHaveCount(0);
 });
 
+test("streams in the preview carry a badge and cannot be selected, not even with Select all", async ({ page }) => {
+  await fulfillPreview(page, {
+    kind: "preview",
+    view: {
+      key: "e2e-unknown-key",
+      title: "Mocked Streams",
+      media: { mediaType: "video", resolution: "1080" },
+      startIntervalSeconds: 15,
+      items: [
+        { number: 1, url: "https://www.youtube.com/watch?v=rec", title: "Recording", duration: 3600, thumbnailUrl: null },
+        { number: 2, url: "https://www.youtube.com/watch?v=live", title: "Live Now", duration: null, thumbnailUrl: null, live: "live" },
+        { number: 3, url: "https://www.youtube.com/watch?v=soon", title: "Starts Soon", duration: null, thumbnailUrl: null, live: "upcoming" },
+        { number: 4, url: "https://www.youtube.com/watch?v=end", title: "Just Over", duration: null, thumbnailUrl: null, live: "justEnded" },
+      ],
+    },
+  });
+  await page.goto("/");
+  const { link, add } = addForm(page);
+  await link.fill(youtubePlaylist);
+  await add.click();
+
+  const dialog = page.getByRole("dialog", { name: "Mocked Streams" });
+  const entry = (title: string) => dialog.getByRole("checkbox", { name: new RegExp(`^${title}`) });
+  const row = (title: string) => dialog.getByRole("listitem").filter({ hasText: title });
+  const selectAll = dialog.getByRole("checkbox", { name: "Select all" });
+
+  await expect(entry("Recording")).toBeChecked();
+  for (const [title, badge] of [["Live Now", "Live"], ["Starts Soon", "Upcoming"], ["Just Over", "Just ended"]]) {
+    await expect(entry(title)).not.toBeChecked();
+    await expect(entry(title)).toBeDisabled();
+    // Das Badge steht mobil unter dem Titel und breit daneben, sichtbar ist je eins.
+    await expect(row(title).getByText(badge, { exact: true }).filter({ visible: true })).toHaveCount(1);
+  }
+  await expect(dialog).toContainText("1 of 4 selected");
+  // Alle auswählbaren sind angehakt.
+  await expect(selectAll).toBeChecked();
+
+  // Klick auf einen gesperrten Eintrag ändert nichts.
+  await entry("Live Now").click({ force: true });
+  await expect(entry("Live Now")).not.toBeChecked();
+
+  await selectAll.click();
+  await expect(dialog).toContainText("0 of 4 selected");
+  await selectAll.click();
+  await expect(dialog).toContainText("1 of 4 selected");
+  await expect(entry("Starts Soon")).not.toBeChecked();
+  await expect(dialog.getByRole("button", { name: "Add 1 to queue" })).toBeEnabled();
+});
+
 test("Cancel while loading closes the dialog and adds nothing", async ({ page }) => {
   // Die Anfrage bleibt hängen, bis der Browser sie abbricht.
   let aborted = false;

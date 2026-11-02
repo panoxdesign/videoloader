@@ -233,6 +233,7 @@ describe("worker", () => {
       title: page,
       thumbnailUrl: null,
       duration: null,
+      liveStatus: null,
       fileTitle: page,
       fileMediaId: null,
     });
@@ -247,6 +248,31 @@ describe("worker", () => {
 
     expect(await worker.finished(broken.id)).toMatchObject({ state: "failed", fileName: null });
     expect(await worker.finished(fine.id)).toMatchObject({ state: "done", fileName: "Mix/002 - Clip One [clip-one].mp4" });
+  });
+
+  it("fails a playlist entry that turns out to be a live stream before it starts recording", async () => {
+    // Flat-Einträge fremder Quellen tragen oft kein `live_status`, erst die Prüfung vor dem Start zeigt es.
+    const worker = await startTestWorker();
+    const stream = {
+      url: `${fixtureUrl}/live/stream.m3u8`,
+      source: "Generic",
+      mediaId: null,
+      title: "Live",
+      thumbnailUrl: null,
+      duration: null,
+      liveStatus: null,
+      fileTitle: "Live",
+      fileMediaId: null,
+    };
+    const { key } = storePreview(
+      worker.db,
+      VIDEO,
+      { kind: "playlist", title: "Streams", fileTitle: "Streams", fileId: null, entries: [stream] },
+      Date.now(),
+    );
+    enqueuePlaylist(worker.db, key, [1], Date.now());
+
+    expect(await worker.finished(listEntries(worker.db)[0].id)).toMatchObject({ state: "failed", fileName: null, filePath: null });
   });
 
   it("extracts a 192 kbps MP3 with cover and title", async () => {
