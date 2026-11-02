@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runOutcome, statesAllowing, transition, type EntryEvent } from "./entry-state";
+import { runOutcome, statesAllowing, statesRemovedAtOnce, transition, type EntryEvent } from "./entry-state";
 
 describe("transition", () => {
   // Die Zeilen aus Spec „Zustandsmodell des Queue-Eintrags“, soweit Ticket 22 sie baut.
@@ -47,6 +47,12 @@ describe("statesAllowing", () => {
     ["start", ["waiting"]],
   ] as const)("%s from %j", (event: EntryEvent, states) => {
     expect(statesAllowing(event)).toEqual(states);
+  });
+});
+
+describe("statesRemovedAtOnce", () => {
+  it("leaves out running entries, Remove cancels those first", () => {
+    expect(statesRemovedAtOnce()).toEqual(["waiting", "failed", "cancelled"]);
   });
 });
 

@@ -101,3 +101,7 @@ _Avoid_: Log, Debug-Ausgabe
 **Abgebrochen**:
 Der Nutzer hat den laufenden Queue-Eintrag gestoppt. Er bleibt ohne Mediendatei in der Queue stehen, anders als ein entfernter Queue-Eintrag, der ganz verschwindet.
 _Avoid_: Storniert, Gecancelt, Entfernt
+
+**Abbruch-Flag**:
+Die Markierung an einem laufenden Queue-Eintrag, dass er gestoppt werden soll, gesetzt von „Cancel“ oder von „Remove“. Der Worker beendet yt-dlp im nächsten Tick. Bis dahin zeigt die Liste „Cancelling…“. Mit „Cancel“ endet der Eintrag als abgebrochen, mit „Remove“ verschwindet er. Wird er vorher fertig, bleibt er fertig.
+_Avoid_: Abbruch-Status, Stopp-Signal

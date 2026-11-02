@@ -1,5 +1,5 @@
 import { and, asc, count, eq, inArray, isNull, lt, lte, max, or } from "drizzle-orm";
-import { statesAllowing } from "@/lib/entry-state";
+import { statesAllowing, statesRemovedAtOnce } from "@/lib/entry-state";
 import type { Media } from "@/lib/media";
 import type { CheckedMedia, FileNaming } from "./check/parse-check";
 import type { Db, Tx } from "./db/open";
@@ -121,15 +121,7 @@ export function removeEntry(db: Db, id: number) {
   return db.transaction((tx) => {
     const removed = tx
       .delete(queueEntries)
-      .where(
-        and(
-          eq(queueEntries.id, id),
-          inArray(
-            queueEntries.state,
-            statesAllowing("remove").filter((state) => state !== "running"),
-          ),
-        ),
-      )
+      .where(and(eq(queueEntries.id, id), inArray(queueEntries.state, statesRemovedAtOnce())))
       .run();
     if (removed.changes > 0) return true;
     const flagged = tx

@@ -18,7 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { transition } from "@/lib/entry-state";
+import { statesRemovedAtOnce, transition } from "@/lib/entry-state";
 import {
   countByFilter,
   FILTERS,
@@ -114,7 +114,7 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Nach „Retry“ ist der Eintrag nicht mehr fehlgeschlagen, die Details gehen mit zu.
   const showDetails = detailsOpen && entry.state === "failed";
-  const canRemove = entry.state !== "running" && transition(entry.state, "remove") !== undefined;
+  const canRemove = statesRemovedAtOnce().includes(entry.state);
 
   return (
     <li
@@ -232,8 +232,7 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
             />
           </div>
         )}
-        {/* Welche Zeile Retry und Remove zeigt, sagen die Zustandsübergänge. Laufende entfernt
-            Remove nur im Wettlauf (Klick auf wartend, gerade gestartet), dort steht Cancel. */}
+        {/* Welche Zeile Retry und Remove zeigt, sagen die Zustandsübergänge. */}
         {(transition(entry.state, "retry") || canRemove) && (
           <div className="flex flex-none gap-2">
             {transition(entry.state, "retry") && (

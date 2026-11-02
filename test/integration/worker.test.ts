@@ -438,7 +438,7 @@ describe("worker", () => {
       await worker.cancelled(id);
 
       expect(Date.now() - before).toBeGreaterThanOrEqual(500);
-      expect(worker.lines.some((line) => line.includes(`queue entry ${id}: yt-dlp ignored SIGTERM`))).toBe(true);
+      expect(worker.lines.some((line) => line.includes(`queue entry ${id}: process group survived SIGTERM`))).toBe(true);
       expect(await liveGroupMembers(pgid)).toEqual([]);
       expect(existsSync(join(worker.paths.tmp, String(id)))).toBe(false);
     });

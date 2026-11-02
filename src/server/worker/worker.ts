@@ -55,7 +55,7 @@ class EntryFailure extends Error {
 }
 
 /** Ein laufender Slot. `abort` bricht Prüfung und Download ab, sobald das Abbruch-Flag gesetzt ist. */
-type Slot = { done: Promise<void>; abort: AbortController };
+type Slot = { settled: Promise<void>; abort: AbortController };
 
 export function startWorker(deps: WorkerDeps): Worker {
   const slots = new Map<number, Slot>();
@@ -70,17 +70,17 @@ export function startWorker(deps: WorkerDeps): Worker {
         if (!entry) break;
         const abort = new AbortController();
         // Ein Fehler im Slot darf den Next-Prozess nicht als unhandled rejection beenden.
-        const done = runSlot(deps, entry, abort.signal)
+        const settled = runSlot(deps, entry, abort.signal)
           .catch((error) => deps.log.error(`queue entry ${entry.id}: slot failed: ${errorText(error)}`))
           .finally(() => slots.delete(entry.id));
-        slots.set(entry.id, { done, abort });
+        slots.set(entry.id, { settled, abort });
       }
     } catch (error) {
       // Sonst plant sich der Worker nicht neu ein und die Queue steht still.
       deps.log.error(`claiming the next queue entry failed: ${errorText(error)}`);
     }
     try {
-      for (const id of flaggedForCancel(deps.db)) slots.get(id)?.abort.abort();
+      for (const id of flaggedToStop(deps.db)) slots.get(id)?.abort.abort();
     } catch (error) {
       deps.log.error(`checking cancel flags failed: ${errorText(error)}`);
     }
@@ -93,13 +93,13 @@ export function startWorker(deps: WorkerDeps): Worker {
     async stop() {
       stopped = true;
       clearTimeout(timer);
-      await Promise.all([...slots.values()].map((slot) => slot.done));
+      await Promise.all([...slots.values()].map((slot) => slot.settled));
     },
   };
 }
 
 /** Laufende Einträge mit Abbruch-Flag („Cancel“ oder „Remove“). */
-function flaggedForCancel(db: Db) {
+function flaggedToStop(db: Db) {
   return db
     .select({ id: queueEntries.id })
     .from(queueEntries)
@@ -285,20 +285,16 @@ async function runSlot(deps: WorkerDeps, claimed: QueueEntry, cancel: AbortSigna
       child.on("close", (code) => resolve(code));
     });
     const pgid = child.pid;
-    if (pgid) {
-      update({ pgid });
-      // `detached` macht yt-dlp zum Leiter einer eigenen Gruppe, ffmpeg gehört mit dazu.
-      cancel.addEventListener(
-        "abort",
-        () => {
-          log.info(`queue entry ${entry.id}: cancelling`);
-          stopping = stopGroup(pgid, deps.timing.sigkillMs, exited, () =>
-            log.warn(`queue entry ${entry.id}: yt-dlp ignored SIGTERM, sent SIGKILL`),
-          ).catch((error) => log.error(`queue entry ${entry.id}: could not stop yt-dlp: ${errorText(error)}`));
-        },
-        { once: true },
-      );
-    }
+    // `detached` macht yt-dlp zum Leiter einer eigenen Gruppe, ffmpeg gehört mit dazu.
+    const onCancel = () => {
+      if (!pgid) return;
+      log.info(`queue entry ${entry.id}: cancelling`);
+      stopping = stopGroup(pgid, deps.timing.sigkillMs, exited, () =>
+        log.warn(`queue entry ${entry.id}: process group survived SIGTERM, sent SIGKILL`),
+      ).catch((error) => log.error(`queue entry ${entry.id}: could not stop yt-dlp: ${errorText(error)}`));
+    };
+    if (pgid) update({ pgid });
+    cancel.addEventListener("abort", onCancel, { once: true });
 
     let lastProgressWrite = -Infinity;
     const onLine = (line: string) => {
@@ -330,6 +326,9 @@ async function runSlot(deps: WorkerDeps, claimed: QueueEntry, cancel: AbortSigna
     readLines(child.stderr, onLine);
 
     exitCode = await exited;
+    // Ist yt-dlp weg, gibt es die PGID vielleicht schon nicht mehr oder sie gehört bald einem anderen
+    // Prozess. Ein Flag, das jetzt noch kommt, entscheidet nur noch über den Endzustand.
+    cancel.removeEventListener("abort", onCancel);
   } catch (error) {
     thrown = error;
   }

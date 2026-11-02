@@ -32,6 +32,14 @@ export function statesAllowing(event: EntryEvent): EntryState[] {
 }
 
 /**
+ * Zustände, die „Remove“ sofort löscht. Einen laufenden Eintrag erst nach dem Abbruch, deshalb
+ * zeigt seine Zeile Cancel statt Remove. Remove trifft ihn nur im Wettlauf mit dem Start.
+ */
+export function statesRemovedAtOnce(): EntryState[] {
+  return statesAllowing("remove").filter((state) => state !== "running");
+}
+
+/**
  * Wie ein Lauf endet. Exit 0 mit `DONE` gewinnt gegen ein Abbruch-Flag, das zu spät kam. Sonst
  * entscheidet das Flag: „Remove“ löscht den Eintrag, „Cancel“ bricht ab, ohne Flag schlägt er fehl.
  */
@@ -42,8 +50,7 @@ export function runOutcome({
   succeeded: boolean;
   cancelRequest: CancelRequest | null;
 }): EntryTarget {
-  if (succeeded) return "done";
-  if (cancelRequest === "remove") return "removed";
-  if (cancelRequest === "cancel") return "cancelled";
-  return "failed";
+  const event: EntryEvent = succeeded ? "succeed" : (cancelRequest ?? "fail");
+  // Aus „läuft“ ist jeder dieser Auslöser erlaubt.
+  return transition("running", event)!;
 }
