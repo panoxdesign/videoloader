@@ -32,7 +32,7 @@ import {
 } from "@/lib/queue-view";
 import { texts } from "@/lib/texts";
 import { useHydrated } from "@/lib/use-hydrated";
-import { deleteEntry, removeQueueEntry, retryQueueEntry } from "./actions";
+import { cancelQueueEntry, deleteEntry, removeQueueEntry, retryQueueEntry } from "./actions";
 
 export function QueueList({ entries }: { entries: EntryView[] }) {
   const [filter, setFilter] = useState<Filter>("all");
@@ -114,6 +114,7 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Nach „Retry“ ist der Eintrag nicht mehr fehlgeschlagen, die Details gehen mit zu.
   const showDetails = detailsOpen && entry.state === "failed";
+  const canRemove = entry.state !== "running" && transition(entry.state, "remove") !== undefined;
 
   return (
     <li
@@ -143,6 +144,8 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
           <div className="flex flex-wrap items-center gap-2 text-xs leading-4 font-medium text-foreground-secondary sm:text-[13px] sm:leading-[18px]">
             {entry.fileMissing ? (
               <Badge variant="error">{texts.fileMissing}</Badge>
+            ) : entry.cancelling ? (
+              <Badge variant="neutral">{texts.cancelling}</Badge>
             ) : (
               <Badge variant={BADGE_VARIANT[entry.state]}>
                 {entry.state === "running" && entry.phase === "postprocess" ? texts.processing : texts.states[entry.state]}
@@ -217,13 +220,26 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
             <DeleteButton entry={entry} title={title} />
           </div>
         )}
-        {/* Welche Zeile Retry und Remove zeigt, sagen die Zustandsübergänge. */}
-        {(transition(entry.state, "retry") || transition(entry.state, "remove")) && (
+        {/* Laufende Einträge zeigen Cancel, gesperrt bei „Cancelling…“. */}
+        {transition(entry.state, "cancel") && (
+          <div className="flex flex-none gap-2">
+            <RowActionButton
+              variant="ghost"
+              label={texts.actions.cancel}
+              icon={XIcon}
+              disabled={entry.cancelling}
+              action={() => cancelQueueEntry(entry.id)}
+            />
+          </div>
+        )}
+        {/* Welche Zeile Retry und Remove zeigt, sagen die Zustandsübergänge. Laufende entfernt
+            Remove nur im Wettlauf (Klick auf wartend, gerade gestartet), dort steht Cancel. */}
+        {(transition(entry.state, "retry") || canRemove) && (
           <div className="flex flex-none gap-2">
             {transition(entry.state, "retry") && (
               <RowActionButton variant="outline" label={texts.actions.retry} icon={RotateCcwIcon} action={() => retryQueueEntry(entry.id)} />
             )}
-            {transition(entry.state, "remove") && (
+            {canRemove && (
               <RowActionButton variant="ghost" label={texts.actions.remove} icon={XIcon} action={() => removeQueueEntry(entry.id)} />
             )}
           </div>
@@ -235,18 +251,20 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
 }
 
 /**
- * Retry (Outline-Pille) und Remove (Text-Button) ohne Rückfrage. Mobil Icon-Buttons mit `aria-label`.
- * Gesperrt, bis die Server Action zurück ist.
+ * Retry (Outline-Pille), Remove und Cancel (Text-Buttons) ohne Rückfrage. Mobil Icon-Buttons mit
+ * `aria-label`. Gesperrt, bis die Server Action zurück ist, oder über `disabled`.
  */
 function RowActionButton({
   variant,
   label,
   icon: Icon,
+  disabled = false,
   action,
 }: {
   variant: "outline" | "ghost";
   label: string;
   icon: LucideIcon;
+  disabled?: boolean;
   action: () => Promise<void>;
 }) {
   const [pending, startTransition] = useTransition();
@@ -254,7 +272,7 @@ function RowActionButton({
     <Button
       variant={variant}
       aria-label={label}
-      disabled={pending}
+      disabled={pending || disabled}
       onClick={() => startTransition(action)}
       className="max-sm:w-11 max-sm:px-0"
     >

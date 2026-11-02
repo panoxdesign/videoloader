@@ -11,7 +11,7 @@ import { CLIP, DASH_DIR, DASH_MANIFEST, ensureMedia, THUMBNAIL } from "./media.t
  * Die Medien-ID kommt aus dem Dateinamen des Mediums, deshalb liefert jede Seite
  * dasselbe Medium unter ihrem eigenen Namen aus (`/media/clip-one.mp4`).
  */
-const PAGES: Record<string, { title: string; media?: "missing" | "cut" | "flaky" }> = {
+const PAGES: Record<string, { title: string; media?: "missing" | "cut" | "flaky" | "slowOnce" }> = {
   "clip-one": { title: "Clip One" },
   "clip-two": { title: "Clip Two" },
   "clip-three": { title: "Clip Three" },
@@ -32,6 +32,9 @@ const PAGES: Record<string, { title: string; media?: "missing" | "cut" | "flaky"
   "gone-clip": { title: "Gone Clip", media: "missing" },
   "cut-clip": { title: "Cut Clip", media: "cut" },
   "flaky-clip": { title: "Flaky Clip", media: "flaky" },
+  // Für „Cancel“ und „Retry“ im E2E (Ticket 22): Der erste Abruf des Mediums kommt gedrosselt,
+  // damit Zeit zum Abbrechen bleibt, danach in voller Geschwindigkeit.
+  "cancel-clip": { title: "Cancel Clip", media: "slowOnce" },
 };
 
 /**
@@ -51,6 +54,8 @@ export async function startFixtureServer(options: {
   const { mediaDir } = options;
   /** Medien mit „flaky“, die ihren 404 schon hatten. */
   const failedOnce = new Set<string>();
+  /** Medien mit „slowOnce“, die ihren gedrosselten Abruf schon hatten. */
+  const slowedOnce = new Set<string>();
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
     const origin = `http://${req.headers.host}`;
@@ -152,6 +157,11 @@ seg101.ts
     }
     if (media && PAGES[media[1]]?.media === "cut") {
       void sendFile(res, join(mediaDir, CLIP), undefined, 0.5);
+      return;
+    }
+    if (media && PAGES[media[1]]?.media === "slowOnce" && !slowedOnce.has(media[1])) {
+      slowedOnce.add(media[1]);
+      void sendFile(res, join(mediaDir, CLIP), 10_000);
       return;
     }
     if (media && PAGES[media[1]]) {

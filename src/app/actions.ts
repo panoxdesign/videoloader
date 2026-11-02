@@ -13,7 +13,7 @@ import { duplicateKey, type Duplicate } from "@/server/duplicate";
 import { deleteDoneEntry } from "@/server/files/media-file";
 import { BUNDLED_YTDLP, dataDirFromEnv, dataPaths } from "@/server/paths";
 import { enqueuePlaylist, openPreview } from "@/server/playlist-preview";
-import { enqueue, findDuplicateEntry, queuePosition, removeEntry, retryEntry } from "@/server/queue";
+import { cancelEntry, enqueue, findDuplicateEntry, queuePosition, removeEntry, retryEntry } from "@/server/queue";
 
 /** Die Duplikat-Warnung, mit dem vorhandenen Eintrag. */
 export type DuplicateWarning = {
@@ -126,9 +126,19 @@ export async function retryQueueEntry(id: number) {
   refresh();
 }
 
-/** „Remove“ ohne Rückfrage, für wartende, fehlgeschlagene und abgebrochene Einträge. */
+/**
+ * „Remove“ ohne Rückfrage, für wartende, fehlgeschlagene und abgebrochene Einträge. Hat der Worker
+ * den Eintrag inzwischen gestartet, bricht er ihn ab und löscht ihn danach.
+ */
 export async function removeQueueEntry(id: number) {
   if (!Number.isSafeInteger(id)) return;
   removeEntry(getDb(), id);
+  refresh();
+}
+
+/** „Cancel“ an einem laufenden Eintrag: setzt das Abbruch-Flag, die Zeile zeigt „Cancelling…“. */
+export async function cancelQueueEntry(id: number) {
+  if (!Number.isSafeInteger(id)) return;
+  cancelEntry(getDb(), id);
   refresh();
 }

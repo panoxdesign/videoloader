@@ -108,6 +108,8 @@ export const texts = {
     cancelled: "Cancelled",
   } satisfies Record<EntryState, string>,
   processing: "Processing",
+  /** Laufend mit Abbruch-Flag, bis der Prozess wirklich beendet ist. Kein eigener Zustand. */
+  cancelling: "Cancelling…",
   /** Fertig, aber die Mediendatei fehlt. Kein eigener Zustand. */
   fileMissing: "File missing",
   actions: {
@@ -115,6 +117,7 @@ export const texts = {
     delete: "Delete",
     retry: "Retry",
     remove: "Remove",
+    cancel: "Cancel",
   },
   /** „Show details“ an fehlgeschlagenen Einträgen, mit dem Rohlog von yt-dlp. */
   details: {

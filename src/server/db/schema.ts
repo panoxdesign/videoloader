@@ -12,6 +12,13 @@ export const NAME_HOLDING_STATES = ["running", "done"] as const satisfies readon
 
 export const PHASES = ["download", "postprocess"] as const;
 
+/**
+ * Das Abbruch-Flag eines laufenden Eintrags: „Cancel“ endet in abgebrochen, „Remove“ löscht den
+ * Eintrag nach dem Abbruch, ohne Umweg über abgebrochen.
+ */
+export const CANCEL_REQUESTS = ["cancel", "remove"] as const;
+export type CancelRequest = (typeof CANCEL_REQUESTS)[number];
+
 export const queueEntries = sqliteTable(
   "queue_entries",
   {
@@ -53,6 +60,8 @@ export const queueEntries = sqliteTable(
     postprocessor: text(),
 
     pgid: integer(),
+    /** Abbruch-Flag, nur bei laufenden Einträgen. Die Liste zeigt dann „Cancelling…“. */
+    cancelRequest: text({ enum: CANCEL_REQUESTS }),
     /**
      * Reservierter Name unter `downloads/`, mit Endung. Gesetzt beim Start. Laufende und
      * fertige Einträge halten ihn, ein Retry behält ihn, solange ihn niemand sonst belegt.

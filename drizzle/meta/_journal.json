@@ -57,6 +57,13 @@
       "when": 1793626154248,
       "tag": "0007_raw_log",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793628928398,
+      "tag": "0008_cancel_request",
+      "breakpoints": true
     }
   ]
 }

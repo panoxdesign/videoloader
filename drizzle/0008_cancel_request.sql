@@ -1,0 +1,1 @@
+ALTER TABLE `queue_entries` ADD `cancel_request` text;

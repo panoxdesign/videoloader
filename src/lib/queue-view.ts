@@ -24,6 +24,8 @@ export type EntryView = Pick<
 > & {
   /** Fertig, aber die Mediendatei fehlt auf der Platte. Kein eigener Zustand. */
   fileMissing: boolean;
+  /** Läuft noch, aber das Abbruch-Flag ist gesetzt („Cancelling…“). Kein eigener Zustand. */
+  cancelling: boolean;
 };
 
 export const FILTERS = ["all", "active", "done", "failedCancelled"] as const;

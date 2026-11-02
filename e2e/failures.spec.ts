@@ -68,3 +68,27 @@ test("retry puts a failed entry back into the queue and it finishes", async ({ p
   await expect(entry).not.toContainText("This video is unavailable");
   await expect(entry.getByRole("button", { name: "Retry" })).toHaveCount(0);
 });
+
+test("cancel stops a running download, and retry puts it back into the queue until it finishes", async ({ page }) => {
+  await page.goto("/");
+  // Der erste Abruf des Mediums kommt gedrosselt (rund 40 s), der zweite in voller Geschwindigkeit.
+  await addLink(page, "/videos/cancel-clip");
+
+  const entry = page.getByRole("listitem").filter({ hasText: "Cancel Clip" });
+  await expect(entry).toContainText("Downloading", { timeout: 60_000 });
+  await expect(entry.getByRole("button", { name: "Remove" })).toHaveCount(0);
+
+  await entry.getByRole("button", { name: "Cancel" }).click();
+  // „Cancelling…“ ist nur kurz zu sehen, solange yt-dlp sich beendet.
+  await expect(entry).toContainText("Cancelled", { timeout: 30_000 });
+  await expect(entry.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+
+  const filters = page.getByRole("group", { name: "Filter" });
+  await filters.getByRole("button", { name: /^Failed & cancelled/ }).click();
+  await expect(entry).toBeVisible();
+  await filters.getByRole("button", { name: /^All/ }).click();
+
+  await entry.getByRole("button", { name: "Retry" }).click();
+  await expect(entry).toContainText("Done", { timeout: 60_000 });
+  await expect(entry.getByRole("button", { name: "Retry" })).toHaveCount(0);
+});

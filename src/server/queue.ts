@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, lt, lte, max, or } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, lt, lte, max, or } from "drizzle-orm";
 import { statesAllowing } from "@/lib/entry-state";
 import type { Media } from "@/lib/media";
 import type { CheckedMedia, FileNaming } from "./check/parse-check";
@@ -77,6 +77,7 @@ const NO_RUN = {
   eta: null,
   postprocessor: null,
   pgid: null,
+  cancelRequest: null,
 } satisfies Partial<QueueEntry>;
 
 /**
@@ -111,13 +112,50 @@ export function retryEntry(db: Db, id: number, now: number) {
 }
 
 /**
- * „Remove“ ohne Rückfrage für wartende, fehlgeschlagene und abgebrochene Einträge. Hat der Worker
- * den Eintrag inzwischen gestartet, bleibt er (laufende entfernt erst Ticket 22).
+ * „Remove“ ohne Rückfrage, in einer Transaktion: Wartende, fehlgeschlagene und abgebrochene
+ * Einträge verschwinden sofort. Läuft der Eintrag inzwischen, bekommt er das Abbruch-Flag
+ * „remove“, und der Worker löscht ihn nach dem Abbruch, ohne Umweg über abgebrochen.
+ * `false`, wenn der Eintrag nicht (mehr) passt.
  */
 export function removeEntry(db: Db, id: number) {
-  const removed = db
-    .delete(queueEntries)
-    .where(and(eq(queueEntries.id, id), inArray(queueEntries.state, statesAllowing("remove"))))
+  return db.transaction((tx) => {
+    const removed = tx
+      .delete(queueEntries)
+      .where(
+        and(
+          eq(queueEntries.id, id),
+          inArray(
+            queueEntries.state,
+            statesAllowing("remove").filter((state) => state !== "running"),
+          ),
+        ),
+      )
+      .run();
+    if (removed.changes > 0) return true;
+    const flagged = tx
+      .update(queueEntries)
+      .set({ cancelRequest: "remove" })
+      .where(and(eq(queueEntries.id, id), eq(queueEntries.state, "running")))
+      .run();
+    return flagged.changes > 0;
+  });
+}
+
+/**
+ * „Cancel“: setzt das Abbruch-Flag eines laufenden Eintrags. Den Prozess beendet der Worker im
+ * nächsten Tick. Ein schon angefordertes Remove bleibt Remove. `false`, wenn nichts zu tun war.
+ */
+export function cancelEntry(db: Db, id: number) {
+  const flagged = db
+    .update(queueEntries)
+    .set({ cancelRequest: "cancel" })
+    .where(
+      and(
+        eq(queueEntries.id, id),
+        inArray(queueEntries.state, statesAllowing("cancel")),
+        isNull(queueEntries.cancelRequest),
+      ),
+    )
     .run();
-  return removed.changes > 0;
+  return flagged.changes > 0;
 }

@@ -58,6 +58,7 @@ async function Queue() {
       fileSize: entry.fileSize,
       playlistTitle: entry.playlistTitle,
       fileMissing: entry.state === "done" && !(await findMediaFile(downloads, entry)),
+      cancelling: entry.state === "running" && entry.cancelRequest !== null,
     })),
   );
   return <QueueList entries={entries} />;

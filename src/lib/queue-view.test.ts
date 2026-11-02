@@ -32,6 +32,7 @@ function entry(id: number, state: EntryState, queuedAt: number, finishedAt: numb
     fileSize: null,
     playlistTitle: null,
     fileMissing: false,
+    cancelling: false,
   };
 }
 

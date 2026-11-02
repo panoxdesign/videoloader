@@ -9,7 +9,7 @@ import type { Media } from "@/lib/media";
 import { checkLink } from "@/server/check/check";
 import { queueEntries } from "@/server/db/schema";
 import { dataPaths } from "@/server/paths";
-import { enqueue, getEntry, listEntries } from "@/server/queue";
+import { cancelEntry, enqueue, getEntry, listEntries, removeEntry } from "@/server/queue";
 import { enqueuePlaylist, storePreview } from "@/server/playlist-preview";
 import { startWorker } from "@/server/worker/worker";
 import { createLogger } from "@/server/log";
@@ -47,10 +47,40 @@ exit 1
 `;
 
 /**
+ * Fake-yt-dlp, das SIGTERM ignoriert, auch für seine Kinder (ein ignoriertes Signal bleibt über
+ * `exec` ignoriert). Legt eine Teildatei in den Temp-Ordner und wartet ewig. Nur SIGKILL beendet es.
+ */
+const IGNORES_SIGTERM = `#!/bin/sh
+trap '' TERM
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -P) case "$2" in temp:*) tmp="\${2#temp:}" ;; esac; shift ;;
+  esac
+  shift
+done
+printf partial > "$tmp/clip.mp4.part"
+while :; do sleep 1; done
+`;
+
+/**
+ * Lebende Prozesse der Gruppe, ohne Zombies. Im Test-Container räumt kein init verwaiste Kinder
+ * ab, `kill(-pgid, 0)` sähe sie noch.
+ */
+async function liveGroupMembers(pgid: number) {
+  const pids = (await readdir("/proc")).filter((name) => /^\d+$/.test(name));
+  const stats = await Promise.all(pids.map((pid) => readFile(`/proc/${pid}/stat`, "utf8").catch(() => "")));
+  return stats.filter((stat) => {
+    // Hinter dem Namen in Klammern: Zustand, Eltern-PID, Prozessgruppe.
+    const [state, , pgrp] = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return Number(pgrp) === pgid && state !== "Z";
+  });
+}
+
+/**
  * Ein Worker auf einem frischen Datenordner. `add` prüft den Link wie „Add“ (immer mit dem
  * echten yt-dlp) und reiht ihn dann ein. `ytDlpPath` gilt nur für den Download.
  */
-async function startTestWorker({ ytDlpPath = YTDLP } = {}) {
+async function startTestWorker({ ytDlpPath = YTDLP, sigkillMs = 5000 } = {}) {
   const { dataDir, db } = await tempDb();
   const paths = dataPaths(dataDir);
   const lines: string[] = [];
@@ -59,7 +89,7 @@ async function startTestWorker({ ytDlpPath = YTDLP } = {}) {
     db,
     ytDlpPath,
     dataDir,
-    timing: { tickMs: 50 },
+    timing: { tickMs: 50, sigkillMs },
     clock: { now: () => Date.now() },
     log,
   });
@@ -77,6 +107,16 @@ async function startTestWorker({ ytDlpPath = YTDLP } = {}) {
     },
     async add(url: string, media: Media) {
       return enqueue(db, url, media, Date.now(), await this.check(url)).id;
+    },
+    /** Wartet, bis yt-dlp läuft, und gibt dessen Prozessgruppe zurück. */
+    started(id: number) {
+      return waitFor(() => getEntry(db, id)?.pgid ?? undefined);
+    },
+    cancelled(id: number) {
+      return waitFor(() => {
+        const e = getEntry(db, id);
+        return e?.state === "cancelled" && e;
+      });
     },
     finished(id: number) {
       return waitFor(() => {
@@ -360,6 +400,77 @@ describe("worker", () => {
       const next = await worker.add(`${fixtureUrl}/videos/clip-three`, VIDEO);
 
       expect(await worker.finished(failing)).toMatchObject({ state: "failed" });
+      expect(await worker.finished(next)).toMatchObject({ state: "done" });
+    });
+  });
+
+  describe("cancel", () => {
+    it("ends a throttled download with SIGTERM and leaves no process, temp folder or file behind", async () => {
+      const worker = await startTestWorker({ sigkillMs: 20_000 });
+      const id = await worker.add(`${fixtureUrl}/videos/clip-four?rate=20000`, VIDEO);
+      const pgid = await worker.started(id);
+      await waitFor(() => (getEntry(worker.db, id)?.downloadedBytes ?? 0) > 0);
+
+      const before = Date.now();
+      expect(cancelEntry(worker.db, id)).toBe(true);
+      const entry = await worker.cancelled(id);
+
+      // yt-dlp folgt SIGTERM, die SIGKILL-Frist wird nicht gebraucht.
+      expect(Date.now() - before).toBeLessThan(10_000);
+      expect(entry).toMatchObject({ state: "cancelled", pgid: null, cancelRequest: null, filePath: null });
+      expect(entry.finishedAt).toBeGreaterThan(0);
+      expect(await liveGroupMembers(pgid)).toEqual([]);
+      expect(existsSync(join(worker.paths.tmp, String(id)))).toBe(false);
+      expect(await readdir(worker.paths.downloads)).toEqual([]);
+    });
+
+    it("kills a yt-dlp that ignores SIGTERM after the SIGKILL grace period", async () => {
+      const fake = join(await tempDataDir(), "yt-dlp");
+      await writeFile(fake, IGNORES_SIGTERM, { mode: 0o755 });
+      const worker = await startTestWorker({ ytDlpPath: fake, sigkillMs: 500 });
+      const id = await worker.add(`${fixtureUrl}/videos/clip-one`, VIDEO);
+      const pgid = await worker.started(id);
+      // Erst wenn die Teildatei da ist, hat das Skript SIGTERM schon abgeschaltet.
+      await waitFor(() => existsSync(join(worker.paths.tmp, String(id), "clip.mp4.part")));
+
+      const before = Date.now();
+      cancelEntry(worker.db, id);
+      await worker.cancelled(id);
+
+      expect(Date.now() - before).toBeGreaterThanOrEqual(500);
+      expect(worker.lines.some((line) => line.includes(`queue entry ${id}: yt-dlp ignored SIGTERM`))).toBe(true);
+      expect(await liveGroupMembers(pgid)).toEqual([]);
+      expect(existsSync(join(worker.paths.tmp, String(id)))).toBe(false);
+    });
+
+    it("removes a running entry after cancelling it, without passing through cancelled", async () => {
+      const worker = await startTestWorker({ sigkillMs: 20_000 });
+      const id = await worker.add(`${fixtureUrl}/videos/clip-three?rate=20000`, VIDEO);
+      const pgid = await worker.started(id);
+
+      expect(removeEntry(worker.db, id)).toBe(true);
+      const states = new Set<string>();
+      await waitFor(() => {
+        const entry = getEntry(worker.db, id);
+        if (entry) states.add(entry.state);
+        return !entry;
+      }, { intervalMs: 5 });
+
+      expect(states).not.toContain("cancelled");
+      expect(await liveGroupMembers(pgid)).toEqual([]);
+      expect(existsSync(join(worker.paths.tmp, String(id)))).toBe(false);
+      expect(await readdir(worker.paths.downloads)).toEqual([]);
+    });
+
+    it("goes on with the next entry after a cancel", async () => {
+      const worker = await startTestWorker({ sigkillMs: 20_000 });
+      const slow = await worker.add(`${fixtureUrl}/videos/clip-four?rate=20000`, VIDEO);
+      const next = await worker.add(`${fixtureUrl}/videos/clip-two`, VIDEO);
+      await worker.started(slow);
+
+      cancelEntry(worker.db, slow);
+
+      expect(await worker.cancelled(slow)).toMatchObject({ state: "cancelled" });
       expect(await worker.finished(next)).toMatchObject({ state: "done" });
     });
   });
