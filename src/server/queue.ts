@@ -65,6 +65,20 @@ export function queuePosition(db: Db, entry: Pick<QueueEntry, "id" | "queuedAt">
   return ahead;
 }
 
+/** Fortschritt und Laufzeitdaten eines Laufs, geleert für den nächsten. */
+const NO_RUN = {
+  phase: null,
+  downloadedBytes: null,
+  totalBytes: null,
+  totalBytesEstimate: null,
+  fragmentIndex: null,
+  fragmentCount: null,
+  speed: null,
+  eta: null,
+  postprocessor: null,
+  pgid: null,
+} satisfies Partial<QueueEntry>;
+
 /**
  * „Retry“ für einen fehlgeschlagenen oder abgebrochenen Eintrag: wieder wartend, hinter allen
  * anderen wartenden, mit derselben Medienart und Auflösung. Fehler, Rohlog, Fortschritt und die
@@ -88,16 +102,7 @@ export function retryEntry(db: Db, id: number, now: number) {
         finishedAt: null,
         errorCategory: null,
         rawLog: null,
-        phase: null,
-        downloadedBytes: null,
-        totalBytes: null,
-        totalBytesEstimate: null,
-        fragmentIndex: null,
-        fragmentCount: null,
-        speed: null,
-        eta: null,
-        postprocessor: null,
-        pgid: null,
+        ...NO_RUN,
       })
       .where(and(eq(queueEntries.id, id), inArray(queueEntries.state, statesAllowing("retry"))))
       .run();

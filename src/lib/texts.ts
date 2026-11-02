@@ -1,5 +1,5 @@
 import type { EntryState } from "@/server/db/schema";
-import type { ErrorCategory } from "@/server/worker/classify-error";
+import type { ErrorCategory } from "./error-category";
 import type { Resolution } from "./media";
 import type { Filter } from "./queue-view";
 import type { Theme } from "./theme";
@@ -163,6 +163,7 @@ export const texts = {
     drm: "DRM-protected media can't be downloaded.",
     jsChallenge: "Couldn't process this video – yt-dlp may need an update.",
     live: "Live streams can't be downloaded.",
+    justEnded: "This stream just ended. Try again later.",
     other: "Download failed.",
   } satisfies Record<ErrorCategory, string>,
 } as const;

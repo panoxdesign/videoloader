@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { ERROR_CATEGORIES } from "../../lib/error-category";
 import { MEDIA_TYPES, RESOLUTIONS } from "../../lib/media";
-import { ERROR_CATEGORIES } from "../worker/classify-error";
 
 /** wartend, läuft, fertig, fehlgeschlagen, abgebrochen */
 export const ENTRY_STATES = ["waiting", "running", "done", "failed", "cancelled"] as const;

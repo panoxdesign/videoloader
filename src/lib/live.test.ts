@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isUpcomingError, liveBlock, liveError, parseLiveStatus } from "./live";
+import { isUpcomingError, liveBlock, liveCategory, liveError, parseLiveStatus } from "./live";
 
 describe("parseLiveStatus", () => {
   it.each(["is_live", "is_upcoming", "post_live", "was_live", "not_live"])("keeps %s", (status) => {
@@ -27,6 +27,19 @@ describe("liveBlock", () => {
 
   it.each([["was_live"], ["not_live"], [null]] as const)("lets %s through", (status) => {
     expect(liveBlock(status)).toBeUndefined();
+  });
+});
+
+describe("liveCategory", () => {
+  // Wie „Add“: laufend und angekündigt sind „live“, gerade beendet hat eine eigene Meldung.
+  it.each([
+    ["is_live", "live"],
+    ["is_upcoming", "live"],
+    ["post_live", "justEnded"],
+    ["was_live", undefined],
+    [null, undefined],
+  ] as const)("%s fails as %s", (status, category) => {
+    expect(liveCategory(status)).toBe(category);
   });
 });
 

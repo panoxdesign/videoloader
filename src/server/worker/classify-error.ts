@@ -1,31 +1,11 @@
-/**
- * Fehlerkategorien eines fehlgeschlagenen Queue-Eintrags. Die Kurzmeldung dazu steht in
- * `texts.errors`. `live` setzt der Worker selbst, wenn die Prüfung vor dem Start einen Stream findet.
- */
-export const ERROR_CATEGORIES = [
-  "rateLimit",
-  "private",
-  "unavailable",
-  "geoBlocked",
-  "ageRestricted",
-  "botCheck",
-  "loginRequired",
-  "network",
-  "unsupportedLink",
-  "noFormat",
-  "drm",
-  "jsChallenge",
-  "live",
-  "other",
-] as const;
-export type ErrorCategory = (typeof ERROR_CATEGORIES)[number];
+import type { ErrorCategory } from "@/lib/error-category";
 
 /**
  * Regex-Tabelle aus Spec „Fehlerklassifikation“, in dieser Reihenfolge geprüft. Die spezifischen
  * Kategorien stehen vor „Login nötig“, weil yt-dlp Login-Hinweise an viele Meldungen anhängt.
  * Rate-Limit erkennt Ticket 21 schon, es verhält sich aber bis Ticket 29 wie ein normaler Fehler.
  */
-const PATTERNS: [Exclude<ErrorCategory, "live" | "other">, RegExp][] = [
+const PATTERNS: [Exclude<ErrorCategory, "live" | "justEnded" | "other">, RegExp][] = [
   ["rateLimit", /This content isn't available, try again later|HTTP Error 429/i],
   ["private", /Private video/i],
   [

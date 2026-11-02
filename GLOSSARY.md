@@ -86,6 +86,18 @@ _Avoid_: Abgeschlossen, Erledigt
 Der Download des Queue-Eintrags ist an einem Fehler gescheitert. Ein Rate-Limit zählt nicht dazu.
 _Avoid_: Fehler, Kaputt
 
+**Fehlerkategorie**:
+Der Grund, an dem ein fehlgeschlagener Queue-Eintrag gescheitert ist, etwa „privat“, „nicht verfügbar“ oder „Netzwerkfehler“. Die App ordnet ihn der ersten `ERROR:`-Zeile von yt-dlp zu. Zu jeder Fehlerkategorie gehört eine Kurzmeldung.
+_Avoid_: Fehlercode, Fehlertyp
+
+**Kurzmeldung**:
+Der eine Satz, mit dem die Liste einem Nutzer sagt, warum ein Queue-Eintrag fehlgeschlagen ist. Sie folgt aus der Fehlerkategorie.
+_Avoid_: Fehlermeldung, Error-Message
+
+**Rohlog**:
+Die letzten 64 KB der Ausgabe von yt-dlp zu einem fehlgeschlagenen Queue-Eintrag, ohne Fortschrittszeilen. Der Nutzer sieht ihn unter „Show details“.
+_Avoid_: Log, Debug-Ausgabe
+
 **Abgebrochen**:
 Der Nutzer hat den laufenden Queue-Eintrag gestoppt. Er bleibt ohne Mediendatei in der Queue stehen, anders als ein entfernter Queue-Eintrag, der ganz verschwindet.
 _Avoid_: Storniert, Gecancelt, Entfernt

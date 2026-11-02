@@ -31,6 +31,14 @@ printf media > "$dir/$(printf '%s' "$out" | sed 's/%(ext)s$/mp4/; s/%%/%/g')"
 exit 1
 `;
 
+/** Fake-yt-dlp: erst ein Fehler, dann mehr als 64 KB anderes und ein zweiter Fehler, Exit 1. */
+const ERROR_THEN_CHATTER = `#!/bin/sh
+echo 'ERROR: [generic] x: Private video' >&2
+seq 1 5000 | sed 's/^/[debug] chatty line /' >&2
+echo 'ERROR: Unable to download webpage: Connection refused' >&2
+exit 1
+`;
+
 /** Fake-yt-dlp: schreibt 100 000 Zeilen (rund 5 MB) auf stderr, dann einen Fehler, und endet mit 1. */
 const CHATTY_FAIL = `#!/bin/sh
 seq 1 100000 | sed 's/^/[debug] chatty line /' >&2
@@ -333,6 +341,17 @@ describe("worker", () => {
       expect(Buffer.byteLength(entry.rawLog!)).toBeGreaterThan(60 * 1024);
       expect(entry.rawLog).toMatch(/chatty line 100000\nERROR: \[generic\] x: Private video$/);
       expect(entry.rawLog).not.toContain("chatty line 1\n");
+    });
+
+    it("classifies by the first ERROR: line even after it has left the raw log", async () => {
+      const fake = join(await tempDataDir(), "yt-dlp");
+      await writeFile(fake, ERROR_THEN_CHATTER, { mode: 0o755 });
+      const worker = await startTestWorker({ ytDlpPath: fake });
+
+      const entry = await worker.finished(await worker.add(`${fixtureUrl}/videos/clip-one`, VIDEO));
+
+      expect(entry.rawLog).not.toContain("Private video");
+      expect(entry).toMatchObject({ state: "failed", errorCategory: "private" });
     });
 
     it("goes on with the next entry after a failure", async () => {

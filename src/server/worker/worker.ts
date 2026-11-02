@@ -4,7 +4,8 @@ import { lstatSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { Readable } from "node:stream";
-import { liveBlock } from "@/lib/live";
+import type { ErrorCategory } from "@/lib/error-category";
+import { liveCategory } from "@/lib/live";
 import { parseMedia } from "@/lib/media";
 import { CHECK_TIMEOUT_MS, checkLink } from "../check/check";
 import type { Db, Tx } from "../db/open";
@@ -14,7 +15,7 @@ import { isInside } from "../files/inside";
 import type { Logger } from "../log";
 import { dataPaths } from "../paths";
 import { buildDownloadArgs } from "./args";
-import { classifyError, type ErrorCategory } from "./classify-error";
+import { classifyError } from "./classify-error";
 import { parseLine, type DoneLine } from "./parse-line";
 import { RawLog } from "./raw-log";
 
@@ -197,7 +198,8 @@ async function completeNaming({ db, ytDlpPath, dataDir }: WorkerDeps, entry: Que
   }
   if (result.kind === "playlist") throw new EntryFailure("other", "check before start found a playlist");
   const { media } = result;
-  if (liveBlock(media.liveStatus)) throw new EntryFailure("live", `check before start found a stream (${media.liveStatus})`);
+  const streamCategory = liveCategory(media.liveStatus);
+  if (streamCategory) throw new EntryFailure(streamCategory, `check before start found a stream (${media.liveStatus})`);
   return db.transaction((tx) => {
     const checked = {
       source: media.source ?? entry.source,
@@ -226,6 +228,8 @@ async function runSlot(deps: WorkerDeps, claimed: QueueEntry) {
   let thrown: unknown;
   // Alles, was der Zeilen-Parser nicht auswertet, aus stdout und stderr in der Reihenfolge des Eintreffens.
   const rawLog = new RawLog();
+  // Die Klassifikation gilt der ersten `ERROR:`-Zeile, auch wenn der Ringpuffer sie schon verdrängt hat.
+  let firstError: string | undefined;
   try {
     await mkdir(tmpDir, { recursive: true });
     await mkdir(paths.downloads, { recursive: true });
@@ -251,6 +255,7 @@ async function runSlot(deps: WorkerDeps, claimed: QueueEntry) {
       const parsed = parseLine(line);
       if (parsed.kind === "log") {
         rawLog.push(parsed.line);
+        if (firstError === undefined && parsed.line.startsWith("ERROR:")) firstError = parsed.line;
       } else if (parsed.kind === "done") {
         done = parsed;
       } else if (parsed.kind === "postprocess") {
@@ -312,7 +317,7 @@ async function runSlot(deps: WorkerDeps, claimed: QueueEntry) {
       // Rate-Limit wird schon erkannt, verhält sich aber bis Ticket 29 wie jeder andere Fehler.
       update({
         state: "failed",
-        errorCategory: thrown instanceof EntryFailure ? thrown.category : classifyError(rawLog.text()),
+        errorCategory: thrown instanceof EntryFailure ? thrown.category : classifyError(firstError ?? ""),
         rawLog: rawLog.text(),
         finishedAt: clock.now(),
         pgid: null,

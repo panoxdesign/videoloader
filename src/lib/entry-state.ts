@@ -1,4 +1,5 @@
-import { ENTRY_STATES, type EntryState } from "@/server/db/schema";
+// Nur der Typ: Die Funktion läuft auch im Browser, `schema.ts` zöge Drizzle ins Bundle.
+import type { EntryState } from "@/server/db/schema";
 
 /**
  * Auslöser aus Spec „Zustandsmodell des Queue-Eintrags“. Abbruch (Ticket 22) und Rate-Limit
@@ -26,5 +27,5 @@ export function transition(from: EntryState, event: EntryEvent): EntryTarget | u
 
 /** Die Zustände, aus denen der Auslöser wirkt, etwa für `where state in (…)`. */
 export function statesAllowing(event: EntryEvent): EntryState[] {
-  return ENTRY_STATES.filter((state) => transition(state, event) !== undefined);
+  return Object.keys(TRANSITIONS[event]) as EntryState[];
 }

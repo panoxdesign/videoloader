@@ -1,3 +1,4 @@
+import type { ErrorCategory } from "./error-category";
 import { texts } from "./texts";
 
 /** Die Werte von `live_status` bei yt-dlp. */
@@ -23,6 +24,13 @@ export function liveBlock(status: LiveStatus | null): LiveBlock | undefined {
   if (status === "is_upcoming") return "upcoming";
   if (status === "post_live") return "justEnded";
   return undefined;
+}
+
+/** Fehlerkategorie, wenn der Worker einen Stream vor dem Start ablehnt, mit derselben Meldung wie „Add“. */
+export function liveCategory(status: LiveStatus | null): Extract<ErrorCategory, "live" | "justEnded"> | undefined {
+  const block = liveBlock(status);
+  if (!block) return undefined;
+  return block === "justEnded" ? "justEnded" : "live";
 }
 
 /** Meldung unter dem Formular, wenn „Add“ das Medium deshalb ablehnt. Sonst `undefined`. */

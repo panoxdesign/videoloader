@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "cn";
-import { DownloadIcon, ListVideoIcon, RotateCcwIcon, Trash2Icon, XIcon } from "lucide-react";
+import { DownloadIcon, ListVideoIcon, RotateCcwIcon, Trash2Icon, XIcon, type LucideIcon } from "lucide-react";
 import { useEffect, useId, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { transition } from "@/lib/entry-state";
 import {
   countByFilter,
   FILTERS,
@@ -183,7 +184,7 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
             )}
             {entry.state === "failed" && (
               <>
-                <span className="text-error-foreground">{texts.errors[entry.errorCategory ?? "other"] ?? texts.errors.other}</span>
+                <span className="text-error-foreground">{texts.errors[entry.errorCategory ?? "other"]}</span>
                 {/* Der Link selbst bleibt klein in der Zeile, die Trefferfläche ist 44 px hoch. */}
                 <button
                   type="button"
@@ -216,15 +217,15 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
             <DeleteButton entry={entry} title={title} />
           </div>
         )}
-        {(entry.state === "failed" || entry.state === "cancelled") && (
+        {/* Welche Zeile Retry und Remove zeigt, sagen die Zustandsübergänge. */}
+        {(transition(entry.state, "retry") || transition(entry.state, "remove")) && (
           <div className="flex flex-none gap-2">
-            <RetryButton id={entry.id} />
-            <RemoveButton id={entry.id} />
-          </div>
-        )}
-        {entry.state === "waiting" && (
-          <div className="flex flex-none gap-2">
-            <RemoveButton id={entry.id} />
+            {transition(entry.state, "retry") && (
+              <RowActionButton variant="outline" label={texts.actions.retry} icon={RotateCcwIcon} action={() => retryQueueEntry(entry.id)} />
+            )}
+            {transition(entry.state, "remove") && (
+              <RowActionButton variant="ghost" label={texts.actions.remove} icon={XIcon} action={() => removeQueueEntry(entry.id)} />
+            )}
           </div>
         )}
       </div>
@@ -233,36 +234,32 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
   );
 }
 
-/** „Retry“ als Outline-Pille, mobil als Icon-Button. */
-function RetryButton({ id }: { id: number }) {
+/**
+ * Retry (Outline-Pille) und Remove (Text-Button) ohne Rückfrage. Mobil Icon-Buttons mit `aria-label`.
+ * Gesperrt, bis die Server Action zurück ist.
+ */
+function RowActionButton({
+  variant,
+  label,
+  icon: Icon,
+  action,
+}: {
+  variant: "outline" | "ghost";
+  label: string;
+  icon: LucideIcon;
+  action: () => Promise<void>;
+}) {
   const [pending, startTransition] = useTransition();
   return (
     <Button
-      variant="outline"
-      aria-label={texts.actions.retry}
+      variant={variant}
+      aria-label={label}
       disabled={pending}
-      onClick={() => startTransition(() => retryQueueEntry(id))}
+      onClick={() => startTransition(action)}
       className="max-sm:w-11 max-sm:px-0"
     >
-      <RotateCcwIcon aria-hidden className="sm:hidden" />
-      <span className="max-sm:hidden">{texts.actions.retry}</span>
-    </Button>
-  );
-}
-
-/** „Remove“ als Text-Button, ohne Rückfrage. */
-function RemoveButton({ id }: { id: number }) {
-  const [pending, startTransition] = useTransition();
-  return (
-    <Button
-      variant="ghost"
-      aria-label={texts.actions.remove}
-      disabled={pending}
-      onClick={() => startTransition(() => removeQueueEntry(id))}
-      className="max-sm:w-11 max-sm:px-0"
-    >
-      <XIcon aria-hidden className="sm:hidden" />
-      <span className="max-sm:hidden">{texts.actions.remove}</span>
+      <Icon aria-hidden className="sm:hidden" />
+      <span className="max-sm:hidden">{label}</span>
     </Button>
   );
 }
