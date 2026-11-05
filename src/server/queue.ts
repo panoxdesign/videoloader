@@ -1,9 +1,9 @@
 import { and, asc, count, eq, inArray, isNull, lt, lte, max, or } from "drizzle-orm";
-import { statesAllowing, statesRemovedAtOnce } from "@/lib/entry-state";
+import { statesAllowing, statesRemovedAtOnce, type EntryEvent } from "@/lib/entry-state";
 import type { Media } from "@/lib/media";
 import type { CheckedMedia, FileNaming } from "./check/parse-check";
 import type { Db, Tx } from "./db/open";
-import { queueEntries, type QueueEntry } from "./db/schema";
+import { queueEntries, queueState, type QueueEntry } from "./db/schema";
 import { findDuplicate, type MediaIdentity } from "./duplicate";
 import { findMediaFile } from "./files/media-file";
 
@@ -150,4 +150,25 @@ export function cancelEntry(db: Db, id: number) {
     )
     .run();
   return flagged.changes > 0;
+}
+
+/** Ob die Queue pausiert ist. Ohne Zeile in `queue_state` ist sie es nicht. */
+export function isPaused(db: Db | Tx) {
+  return db.select({ paused: queueState.paused }).from(queueState).where(eq(queueState.id, 1)).get()?.paused ?? false;
+}
+
+/** „Pause queue“ bzw. „Resume queue“. Laufende Einträge laden zu Ende, der Worker startet nur nichts Neues. */
+export function setPaused(db: Db, paused: boolean) {
+  db.insert(queueState)
+    .values({ id: 1, paused })
+    .onConflictDoUpdate({ target: queueState.id, set: { paused } })
+    .run();
+}
+
+/**
+ * „Clear waiting“ bzw. „Clear failed & cancelled“: entfernt alle Einträge der Gruppe, die jetzt
+ * noch dazugehören. Ein Eintrag, den der Worker inzwischen gestartet hat, bleibt. Wie viele es waren.
+ */
+export function clearEntries(db: Db, event: Extract<EntryEvent, "clearWaiting" | "clearFailedCancelled">) {
+  return db.delete(queueEntries).where(inArray(queueEntries.state, statesAllowing(event))).run().changes;
 }

@@ -24,6 +24,14 @@ _Avoid_: Platz, Reihenfolge, Index
 Der vom Nutzer gesetzte Zustand der Queue, in dem keine Queue-Einträge starten. Laufende Queue-Einträge laden zu Ende.
 _Avoid_: Stopp, Anhalten
 
+**Slot**:
+Einer von `MAX_CONCURRENT_DOWNLOADS` Plätzen des Workers, in dem ein Queue-Eintrag läuft. Ist ein Slot frei, startet der Worker den nächsten wartenden.
+_Avoid_: Thread, Kanal, Worker
+
+**Sammelaktion**:
+„Clear waiting“ oder „Clear failed & cancelled“: entfernt nach einer Bestätigung alle wartenden bzw. alle fehlgeschlagenen und abgebrochenen Queue-Einträge auf einmal. Laufende und fertige bleiben.
+_Avoid_: Bulk-Aktion, Massenlöschung
+
 **Medienart**:
 Die Wahl pro Queue-Eintrag, ob das Medium als Video oder nur als Audio (MP3) heruntergeladen wird.
 _Avoid_: Format, Typ, Modus

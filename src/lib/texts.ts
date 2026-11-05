@@ -108,6 +108,31 @@ export const texts = {
     cancelled: "Cancelled",
   } satisfies Record<EntryState, string>,
   processing: "Processing",
+  /** Wartend, während die Queue pausiert ist. Kein eigener Zustand. */
+  paused: "Paused",
+  /** „Pause queue“ rechts neben den Filterchips, das Menü „…“ und das graue Banner. */
+  queueControls: {
+    pause: "Pause queue",
+    resume: "Resume queue",
+    more: "More queue actions",
+    pausedBanner: "Queue paused – running downloads will finish.",
+    clearWaiting: (count: number) => `Clear waiting (${count})`,
+    clearFailedCancelled: (count: number) => `Clear failed & cancelled (${count})`,
+  },
+  /** Bestätigung der Sammelaktionen. Nicht rot, nur Delete ist rot. */
+  clearDialog: {
+    clearWaiting: {
+      title: (count: number) => `Clear ${count} waiting ${count === 1 ? "entry" : "entries"}?`,
+      description: "They are removed from the queue. Running downloads continue.",
+      confirm: "Clear waiting",
+    },
+    clearFailedCancelled: {
+      title: (count: number) => `Clear ${count} failed & cancelled ${count === 1 ? "entry" : "entries"}?`,
+      description: "They are removed from the list. Downloaded files are not affected.",
+      confirm: "Clear",
+    },
+    cancel: "Cancel",
+  },
   /** Laufend mit Abbruch-Flag, bis der Prozess wirklich beendet ist. Kein eigener Zustand. */
   cancelling: "Cancelling…",
   /** Fertig, aber die Mediendatei fehlt. Kein eigener Zustand. */

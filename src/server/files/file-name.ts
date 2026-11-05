@@ -59,8 +59,11 @@ export function chooseFileName(
     const fileName = `${folder}${baseName(title, mediaId, n, prefix)}.${ext}`;
     if (!isTaken(fileName)) return fileName;
   }
-  throw new Error(`no free file name for ${title} [${mediaId}]`);
+  throw new NoFreeFileName(`no free file name for ${title} [${mediaId}]`);
 }
+
+/** Alle Suffixe sind belegt. Liegt am Eintrag, nicht an der Umgebung. */
+export class NoFreeFileName extends Error {}
 
 /** Vergleichswert für belegte Namen. `downloads/` kann auf einem Dateisystem ohne Groß-/Kleinschreibung liegen. */
 export function nameKey(fileName: string) {

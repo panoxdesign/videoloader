@@ -2,7 +2,18 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { Media } from "@/lib/media";
 import { queueEntries, type QueueEntry } from "@/server/db/schema";
-import { cancelEntry, enqueue, getEntry, listEntries, queuePosition, removeEntry, retryEntry } from "@/server/queue";
+import {
+  cancelEntry,
+  clearEntries,
+  enqueue,
+  getEntry,
+  isPaused,
+  listEntries,
+  queuePosition,
+  removeEntry,
+  retryEntry,
+  setPaused,
+} from "@/server/queue";
 import { AUDIO, tempDb, VIDEO } from "./helpers";
 
 async function setup() {
@@ -141,5 +152,55 @@ describe("cancelEntry", () => {
 
     expect(cancelEntry(db, entry.id)).toBe(false);
     expect(getEntry(db, entry.id)).toEqual(entry);
+  });
+});
+
+describe("clearEntries", () => {
+  async function mixedQueue() {
+    const { db, add, FAILED } = await setup();
+    const ids = {
+      waiting: [add().id, add().id],
+      running: add({ state: "running" }).id,
+      done: add({ state: "done", finishedAt: 500 }).id,
+      failed: add(FAILED).id,
+      cancelled: add({ state: "cancelled", finishedAt: 500 }).id,
+    };
+    return { db, ids };
+  }
+
+  it("clears waiting entries only and leaves the running one to finish", async () => {
+    const { db, ids } = await mixedQueue();
+
+    expect(clearEntries(db, "clearWaiting")).toBe(2);
+
+    expect(listEntries(db).map(({ id }) => id)).toEqual([ids.running, ids.done, ids.failed, ids.cancelled]);
+  });
+
+  it("clears failed and cancelled entries only", async () => {
+    const { db, ids } = await mixedQueue();
+
+    expect(clearEntries(db, "clearFailedCancelled")).toBe(2);
+
+    expect(listEntries(db).map(({ id }) => id)).toEqual([...ids.waiting, ids.running, ids.done]);
+  });
+
+  it("is 0 when there is nothing to clear", async () => {
+    const { db } = await setup();
+    expect(clearEntries(db, "clearWaiting")).toBe(0);
+  });
+});
+
+describe("pause", () => {
+  it("is off in a fresh database and switches on and off", async () => {
+    const { db } = await setup();
+    expect(isPaused(db)).toBe(false);
+
+    setPaused(db, true);
+    expect(isPaused(db)).toBe(true);
+    setPaused(db, true);
+    expect(isPaused(db)).toBe(true);
+
+    setPaused(db, false);
+    expect(isPaused(db)).toBe(false);
   });
 });

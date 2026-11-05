@@ -11,5 +11,15 @@ export default defineConfig({
     baseURL: process.env.BASE_URL ?? "http://localhost:3000",
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: /queue-wide\.spec\.ts/ },
+    // Pause und Sammelaktionen wirken auf die ganze Queue und damit auf jeden parallel laufenden
+    // Test. Deshalb laufen sie erst, wenn alle anderen fertig sind, nacheinander in einer Datei.
+    {
+      name: "queue-wide",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /queue-wide\.spec\.ts/,
+      dependencies: ["chromium"],
+    },
+  ],
 });

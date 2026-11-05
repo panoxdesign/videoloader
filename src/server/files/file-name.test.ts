@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { baseName, chooseFileName, extensionOf, MAX_NAME_BYTES, nameKey, outputTemplate, playlistFolder } from "./file-name";
+import {
+  baseName,
+  chooseFileName,
+  extensionOf,
+  MAX_NAME_BYTES,
+  nameKey,
+  NoFreeFileName,
+  outputTemplate,
+  playlistFolder,
+} from "./file-name";
 
 const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 
@@ -52,6 +61,20 @@ describe("chooseFileName", () => {
   it("fills a gap left by a deleted file", () => {
     const taken = new Set(["Clip One [clip-one].mp4", "Clip One [clip-one] (3).mp4"]);
     expect(chooseFileName(media, (name) => taken.has(name))).toBe("Clip One [clip-one] (2).mp4");
+  });
+
+  // Der Worker unterscheidet das von einem Fehler des Dateisystems: Nur dieser Eintrag schlägt fehl.
+  it("throws NoFreeFileName when every suffix is taken", () => {
+    expect(() => chooseFileName(media, () => true)).toThrow(NoFreeFileName);
+  });
+
+  it("passes an error of isTaken on as it is", () => {
+    const denied = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+    expect(() =>
+      chooseFileName(media, () => {
+        throw denied;
+      }),
+    ).toThrow(denied);
   });
 });
 

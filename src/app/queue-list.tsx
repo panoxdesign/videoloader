@@ -1,7 +1,17 @@
 "use client";
 
 import { cn } from "cn";
-import { DownloadIcon, ListVideoIcon, RotateCcwIcon, Trash2Icon, XIcon, type LucideIcon } from "lucide-react";
+import {
+  DownloadIcon,
+  EllipsisIcon,
+  ListVideoIcon,
+  PauseIcon,
+  PlayIcon,
+  RotateCcwIcon,
+  Trash2Icon,
+  XIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useId, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -17,8 +27,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
-import { statesRemovedAtOnce, transition } from "@/lib/entry-state";
+import { statesAllowing, statesRemovedAtOnce, transition } from "@/lib/entry-state";
 import {
   countByFilter,
   FILTERS,
@@ -32,9 +49,18 @@ import {
 } from "@/lib/queue-view";
 import { texts } from "@/lib/texts";
 import { useHydrated } from "@/lib/use-hydrated";
-import { cancelQueueEntry, deleteEntry, removeQueueEntry, retryQueueEntry } from "./actions";
+import {
+  cancelQueueEntry,
+  clearFailedCancelledEntries,
+  clearWaitingEntries,
+  deleteEntry,
+  pauseQueue,
+  removeQueueEntry,
+  resumeQueue,
+  retryQueueEntry,
+} from "./actions";
 
-export function QueueList({ entries }: { entries: EntryView[] }) {
+export function QueueList({ entries, paused }: { entries: EntryView[]; paused: boolean }) {
   const [filter, setFilter] = useState<Filter>("all");
   const counts = countByFilter(entries);
   const positions = queuePositions(entries);
@@ -57,11 +83,12 @@ export function QueueList({ entries }: { entries: EntryView[] }) {
   return (
     <section aria-label={texts.queue.title} className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
-        {/* Mobil scrollen die Chips waagerecht. Das Padding hält den Fokusring sichtbar. */}
+        {/* Mobil scrollen die Chips waagerecht, links bis zum Rand, rechts bis zu den Queue-Aktionen.
+            Das Padding hält den Fokusring sichtbar. */}
         <div
           role="group"
           aria-label={texts.filters.label}
-          className="-mx-4 -my-1.5 flex flex-1 gap-2 overflow-x-auto px-4 py-1.5 sm:mx-0 sm:flex-wrap sm:px-0"
+          className="-my-1.5 -ml-4 flex min-w-0 flex-1 gap-2 overflow-x-auto py-1.5 pr-1 pl-4 sm:ml-0 sm:flex-wrap sm:px-0"
         >
           {FILTERS.map((option) => (
             <Button
@@ -79,7 +106,7 @@ export function QueueList({ entries }: { entries: EntryView[] }) {
             </Button>
           ))}
         </div>
-        {/* Ticket 28: „Pause queue“ und das Menü „…“ */}
+        <QueueControls entries={entries} paused={paused} />
       </div>
 
       {visible.length === 0 ? (
@@ -89,7 +116,7 @@ export function QueueList({ entries }: { entries: EntryView[] }) {
       ) : (
         <ul className="overflow-hidden rounded-lg border border-border bg-card py-1">
           {visible.map((entry) => (
-            <QueueRow key={entry.id} entry={entry} position={positions.get(entry.id)} />
+            <QueueRow key={entry.id} entry={entry} position={positions.get(entry.id)} paused={paused} />
           ))}
         </ul>
       )}
@@ -105,7 +132,7 @@ const BADGE_VARIANT = {
   cancelled: "neutral",
 } as const;
 
-function QueueRow({ entry, position }: { entry: EntryView; position: number | undefined }) {
+function QueueRow({ entry, position, paused }: { entry: EntryView; position: number | undefined; paused: boolean }) {
   const hydrated = useHydrated();
   const title = entry.title ?? entry.url;
   const fraction =
@@ -147,9 +174,7 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
             ) : entry.cancelling ? (
               <Badge variant="neutral">{texts.cancelling}</Badge>
             ) : (
-              <Badge variant={BADGE_VARIANT[entry.state]}>
-                {entry.state === "running" && entry.phase === "postprocess" ? texts.processing : texts.states[entry.state]}
-              </Badge>
+              <Badge variant={BADGE_VARIANT[entry.state]}>{stateLabel(entry, paused)}</Badge>
             )}
             {/* Fehlgeschlagene Einträge zeigen statt der Medienart die Kurzmeldung. */}
             {entry.state !== "failed" && (
@@ -246,6 +271,119 @@ function QueueRow({ entry, position }: { entry: EntryView; position: number | un
       </div>
       {showDetails && <RawLogBlock id={detailsId} entryId={entry.id} title={title} />}
     </li>
+  );
+}
+
+/** „Processing“ und „Paused“ sind Anzeigen von läuft bzw. wartend, keine eigenen Zustände. */
+function stateLabel(entry: EntryView, paused: boolean) {
+  if (entry.state === "running" && entry.phase === "postprocess") return texts.processing;
+  if (entry.state === "waiting" && paused) return texts.paused;
+  return texts.states[entry.state];
+}
+
+type ClearEvent = "clearWaiting" | "clearFailedCancelled";
+
+const CLEAR_ACTIONS: Record<ClearEvent, () => Promise<void>> = {
+  clearWaiting: clearWaitingEntries,
+  clearFailedCancelled: clearFailedCancelledEntries,
+};
+
+/**
+ * Rechts neben den Filterchips: „Pause queue“ bzw. „Resume queue“ (mobil nur im Menü) und das Menü
+ * „…“ mit den Sammelaktionen, jeweils mit Bestätigung. Welche Einträge sie treffen, sagen die
+ * Zustandsübergänge. Ohne passende Einträge ist die Aktion gesperrt.
+ */
+function QueueControls({ entries, paused }: { entries: EntryView[]; paused: boolean }) {
+  const [pending, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState<ClearEvent | null>(null);
+  // Die Zahl im Dialog bleibt stehen, solange er (auch beim Ausblenden) zu sehen ist.
+  const [shown, setShown] = useState<{ event: ClearEvent; count: number }>({ event: "clearWaiting", count: 0 });
+  const counts: Record<ClearEvent, number> = {
+    clearWaiting: entries.filter((e) => statesAllowing("clearWaiting").includes(e.state)).length,
+    clearFailedCancelled: entries.filter((e) => statesAllowing("clearFailedCancelled").includes(e.state)).length,
+  };
+  const togglePause = () => startTransition(() => (paused ? resumeQueue() : pauseQueue()));
+  const PauseToggleIcon = paused ? PlayIcon : PauseIcon;
+  const pauseLabel = paused ? texts.queueControls.resume : texts.queueControls.pause;
+  const ask = (event: ClearEvent) => {
+    setShown({ event, count: counts[event] });
+    setConfirming(event);
+  };
+  const dialog = texts.clearDialog[shown.event];
+
+  return (
+    <>
+      <Button variant="outline" disabled={pending} onClick={togglePause} className="flex-none max-sm:hidden">
+        <PauseToggleIcon aria-hidden />
+        {pauseLabel}
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button variant="quiet" size="icon" aria-label={texts.queueControls.more} className="flex-none" />}
+        >
+          <EllipsisIcon aria-hidden />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-max">
+          <DropdownMenuItem disabled={pending} onClick={togglePause}>
+            <PauseToggleIcon aria-hidden />
+            {pauseLabel}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={counts.clearWaiting === 0} onClick={() => ask("clearWaiting")}>
+            {texts.queueControls.clearWaiting(counts.clearWaiting)}
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={counts.clearFailedCancelled === 0} onClick={() => ask("clearFailedCancelled")}>
+            {texts.queueControls.clearFailedCancelled(counts.clearFailedCancelled)}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{dialog.title(shown.count)}</AlertDialogTitle>
+            <AlertDialogDescription>{dialog.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{texts.clearDialog.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  await CLEAR_ACTIONS[shown.event]();
+                  setConfirming(null);
+                })
+              }
+            >
+              {dialog.confirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+/** Graues Banner unter dem Formular, solange die Queue pausiert ist. */
+export function PausedBanner() {
+  const [pending, startTransition] = useTransition();
+  return (
+    <div
+      role="status"
+      className="flex flex-col gap-3 rounded-lg bg-muted px-4 py-3.5 text-foreground sm:flex-row sm:items-center sm:gap-4 sm:py-3 sm:pr-3"
+    >
+      <p className="flex flex-1 items-center gap-3 font-medium">
+        <PauseIcon aria-hidden strokeWidth={1.75} className="size-5 flex-none" />
+        {texts.queueControls.pausedBanner}
+      </p>
+      <Button
+        variant="outline"
+        disabled={pending}
+        onClick={() => startTransition(resumeQueue)}
+        className="self-start sm:self-auto"
+      >
+        {texts.queueControls.resume}
+      </Button>
+    </div>
   );
 }
 

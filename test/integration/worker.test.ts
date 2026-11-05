@@ -9,7 +9,7 @@ import type { Media } from "@/lib/media";
 import { checkLink } from "@/server/check/check";
 import { queueEntries } from "@/server/db/schema";
 import { dataPaths } from "@/server/paths";
-import { cancelEntry, enqueue, getEntry, listEntries, removeEntry } from "@/server/queue";
+import { cancelEntry, enqueue, getEntry, listEntries, removeEntry, setPaused } from "@/server/queue";
 import { enqueuePlaylist, storePreview } from "@/server/playlist-preview";
 import { startWorker } from "@/server/worker/worker";
 import { createLogger } from "@/server/log";
@@ -78,10 +78,16 @@ async function liveGroupMembers(pgid: number) {
 
 /**
  * Ein Worker auf einem frischen Datenordner. `add` prüft den Link wie „Add“ (immer mit dem
- * echten yt-dlp) und reiht ihn dann ein. `ytDlpPath` gilt nur für den Download.
+ * echten yt-dlp) und reiht ihn dann ein. `ytDlpPath` gilt nur für den Download. `on` lässt den
+ * Worker auf dem Datenordner eines anderen laufen, wie nach einem Neustart.
  */
-async function startTestWorker({ ytDlpPath = YTDLP, sigkillMs = 5000 } = {}) {
-  const { dataDir, db } = await tempDb();
+async function startTestWorker({
+  ytDlpPath = YTDLP,
+  sigkillMs = 5000,
+  slots = 1,
+  on,
+}: { ytDlpPath?: string; sigkillMs?: number; slots?: number; on?: Awaited<ReturnType<typeof tempDb>> } = {}) {
+  const { dataDir, db } = on ?? (await tempDb());
   const paths = dataPaths(dataDir);
   const lines: string[] = [];
   const log = createLogger({ level: "debug", timeZone: "UTC", write: (line) => lines.push(line) });
@@ -89,6 +95,7 @@ async function startTestWorker({ ytDlpPath = YTDLP, sigkillMs = 5000 } = {}) {
     db,
     ytDlpPath,
     dataDir,
+    slots,
     timing: { tickMs: 50, sigkillMs },
     clock: { now: () => Date.now() },
     log,
@@ -100,6 +107,7 @@ async function startTestWorker({ ytDlpPath = YTDLP, sigkillMs = 5000 } = {}) {
     dataDir,
     paths,
     lines,
+    stop: () => worker.stop(),
     /** Gibt das Prüfergebnis zurück. Reiht gleich danach ein, ohne `await` dazwischen. */
     async check(url: string) {
       const result = await checkLink({ ytDlpPath: YTDLP, url, cacheDir: paths.cache, signal: AbortSignal.timeout(30_000) });
@@ -209,20 +217,28 @@ describe("worker", () => {
     expect(await worker.finished(id)).toMatchObject({ state: "done", fileName, filePath: join(worker.paths.downloads, fileName) });
   });
 
-  it("fails only the entry whose file name cannot be reserved and keeps taking the next ones", async () => {
+  it("keeps entries waiting while the file system refuses the reservation, logs it once and goes on afterwards", async () => {
     const worker = await startTestWorker();
-    // Ist `downloads/` eine Datei, wirft schon die Reservierung im Claim (ENOTDIR).
+    // Ist `downloads/` eine Datei, wirft schon die Reservierung im Claim (ENOTDIR). Das träfe
+    // jeden Eintrag, also schlägt keiner fehl.
     await writeFile(worker.paths.downloads, "not a directory");
 
     const url = `${fixtureUrl}/videos/clip-one`;
-    const failed = await worker.finished(await worker.add(url, VIDEO));
-    expect(failed).toMatchObject({ state: "failed", errorCategory: "other" });
-    // Ohne yt-dlp-Ausgabe steht der Fehler der App im Rohlog, sonst wäre „Show details“ leer.
-    expect(failed.rawLog).toContain("ENOTDIR");
-    expect(worker.lines.find((line) => line.includes(" ERROR "))).toContain("could not reserve a file name");
+    const first = await worker.add(url, VIDEO);
+    const second = await worker.add(url, AUDIO);
+    // Mehrere Ticks abwarten (50 ms).
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    expect([getEntry(worker.db, first)?.state, getEntry(worker.db, second)?.state]).toEqual(["waiting", "waiting"]);
+    const errors = worker.lines.filter((line) => line.includes(" ERROR "));
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("cannot reserve file names");
+    expect(errors[0]).toContain("ENOTDIR");
 
     await rm(worker.paths.downloads);
-    expect(await worker.finished(await worker.add(url, VIDEO))).toMatchObject({ state: "done", fileName: "Clip One [clip-one].mp4" });
+    expect(await worker.finished(first)).toMatchObject({ state: "done", fileName: "Clip One [clip-one].mp4" });
+    expect(await worker.finished(second)).toMatchObject({ state: "done", fileName: "Clip One [clip-one].mp3" });
+    expect(worker.lines.some((line) => line.includes("file names can be reserved again"))).toBe(true);
   });
 
   it("removes the media file of a run that fails after yt-dlp has moved it, so a retry keeps the name", async () => {
@@ -401,6 +417,88 @@ describe("worker", () => {
 
       expect(await worker.finished(failing)).toMatchObject({ state: "failed" });
       expect(await worker.finished(next)).toMatchObject({ state: "done" });
+    });
+  });
+
+  describe("pause", () => {
+    /** Lange genug für viele Ticks (50 ms), in denen der Worker hätte starten können. */
+    const someTicks = () => new Promise((resolve) => setTimeout(resolve, 500));
+
+    it("starts nothing while paused and goes on after resume", async () => {
+      const worker = await startTestWorker();
+      setPaused(worker.db, true);
+      const id = await worker.add(`${fixtureUrl}/videos/clip-two`, VIDEO);
+
+      await someTicks();
+      expect(getEntry(worker.db, id)).toMatchObject({ state: "waiting", pgid: null });
+
+      setPaused(worker.db, false);
+      expect(await worker.finished(id)).toMatchObject({ state: "done" });
+    });
+
+    it("lets a running entry finish and starts the next one only after resume", async () => {
+      const worker = await startTestWorker();
+      const running = await worker.add(`${fixtureUrl}/videos/clip-four?rate=200000`, VIDEO);
+      await worker.started(running);
+      const next = await worker.add(`${fixtureUrl}/videos/clip-two`, VIDEO);
+
+      setPaused(worker.db, true);
+      expect(await worker.finished(running)).toMatchObject({ state: "done" });
+      await someTicks();
+      expect(getEntry(worker.db, next)?.state).toBe("waiting");
+
+      setPaused(worker.db, false);
+      expect(await worker.finished(next)).toMatchObject({ state: "done" });
+    });
+
+    it("still holds after a new worker starts on the same database", async () => {
+      const first = await startTestWorker();
+      setPaused(first.db, true);
+      await first.stop();
+
+      const second = await startTestWorker({ on: { db: first.db, dataDir: first.dataDir } });
+      const id = await second.add(`${fixtureUrl}/videos/clip-two`, VIDEO);
+      await someTicks();
+      expect(getEntry(second.db, id)?.state).toBe("waiting");
+
+      setPaused(second.db, false);
+      expect(await second.finished(id)).toMatchObject({ state: "done" });
+    });
+  });
+
+  describe("slots", () => {
+    it("runs two entries at the same time with two slots, and the third waits", async () => {
+      const worker = await startTestWorker({ slots: 2, sigkillMs: 20_000 });
+      const ids = [
+        await worker.add(`${fixtureUrl}/videos/clip-one?rate=20000`, VIDEO),
+        await worker.add(`${fixtureUrl}/videos/clip-two?rate=20000`, VIDEO),
+        await worker.add(`${fixtureUrl}/videos/clip-three`, VIDEO),
+      ];
+
+      await Promise.all([worker.started(ids[0]), worker.started(ids[1])]);
+      expect(getEntry(worker.db, ids[2])?.state).toBe("waiting");
+
+      // Wird ein Slot frei, rückt der dritte nach.
+      cancelEntry(worker.db, ids[0]);
+      expect(await worker.finished(ids[2])).toMatchObject({ state: "done" });
+      cancelEntry(worker.db, ids[1]);
+      await worker.cancelled(ids[1]);
+    });
+
+    it("gives the same link added twice two different files when both run at once", async () => {
+      const worker = await startTestWorker({ slots: 2 });
+      const url = `${fixtureUrl}/videos/clip-one?rate=200000`;
+      // Wie „Add anyway“: beide Einträge sind da, bevor der nächste Tick sie startet.
+      const checked = await worker.check(url);
+      const first = enqueue(worker.db, url, VIDEO, Date.now(), checked).id;
+      const second = enqueue(worker.db, url, VIDEO, Date.now(), checked).id;
+
+      await Promise.all([worker.started(first), worker.started(second)]);
+      const [a, b] = await Promise.all([worker.finished(first), worker.finished(second)]);
+
+      expect([a.state, b.state]).toEqual(["done", "done"]);
+      expect([a.fileName, b.fileName]).toEqual(["Clip One [clip-one].mp4", "Clip One [clip-one] (2).mp4"]);
+      expect(existsSync(a.filePath!) && existsSync(b.filePath!)).toBe(true);
     });
   });
 

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import { spawn } from "node:child_process";
 import { lstatSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
@@ -8,13 +8,15 @@ import { runOutcome } from "@/lib/entry-state";
 import type { ErrorCategory } from "@/lib/error-category";
 import { liveCategory } from "@/lib/live";
 import { parseMedia } from "@/lib/media";
+import { entriesToStart } from "@/lib/start-decision";
 import { CHECK_TIMEOUT_MS, checkLink } from "../check/check";
 import type { Db, Tx } from "../db/open";
 import { NAME_HOLDING_STATES, queueEntries, type QueueEntry } from "../db/schema";
-import { chooseFileName, extensionOf, nameKey } from "../files/file-name";
+import { chooseFileName, extensionOf, nameKey, NoFreeFileName } from "../files/file-name";
 import { isInside } from "../files/inside";
 import type { Logger } from "../log";
 import { dataPaths } from "../paths";
+import { isPaused } from "../queue";
 import { buildDownloadArgs } from "./args";
 import { classifyError } from "./classify-error";
 import { parseLine, type DoneLine } from "./parse-line";
@@ -31,6 +33,8 @@ export type WorkerDeps = {
   db: Db;
   ytDlpPath: string;
   dataDir: string;
+  /** `MAX_CONCURRENT_DOWNLOADS`: so viele Einträge laufen höchstens gleichzeitig. */
+  slots: number;
   timing: Timing;
   clock: Clock;
   log: Logger;
@@ -38,7 +42,6 @@ export type WorkerDeps = {
 
 export type Worker = { stop(): Promise<void> };
 
-const SLOTS = 1;
 const PROGRESS_WRITE_INTERVAL_MS = 1000;
 
 /**
@@ -61,13 +64,29 @@ export function startWorker(deps: WorkerDeps): Worker {
   const slots = new Map<number, Slot>();
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
+  // Ein Fehler der Umgebung bei der Reservierung kommt jeden Tick wieder, ins Log aber nur einmal.
+  let blocked = false;
 
   const tick = () => {
     if (stopped) return;
     try {
-      while (slots.size < SLOTS) {
-        const entry = claimNext(deps);
-        if (!entry) break;
+      for (;;) {
+        // Gezählt werden die Slots dieses Workers. Laufende Einträge ohne Slot, etwa nach einem
+        // Neustart, räumt erst das Start-Aufräumen weg (Ticket 30).
+        const claim = claimNext(deps, slots.size);
+        if (claim.kind === "blocked") {
+          if (!blocked) {
+            deps.log.error(
+              `cannot reserve file names, waiting entries stay queued until this is fixed: ${errorText(claim.error)}`,
+            );
+          }
+          blocked = true;
+          break;
+        }
+        if (claim.kind === "none") break;
+        if (blocked) deps.log.info("file names can be reserved again, the queue goes on");
+        blocked = false;
+        const { entry } = claim;
         const abort = new AbortController();
         // Ein Fehler im Slot darf den Next-Prozess nicht als unhandled rejection beenden.
         const settled = runSlot(deps, entry, abort.signal)
@@ -109,45 +128,44 @@ function flaggedToStop(db: Db) {
 }
 
 
+type Claim = { kind: "started"; entry: QueueEntry } | { kind: "none" } | { kind: "blocked"; error: unknown };
+
 /**
- * Setzt den ältesten wartenden Eintrag in einer Transaktion auf läuft und reserviert dabei
- * seinen Dateinamen. So bekommen auch mehrere Slots nie denselben Namen. Scheitert die
- * Reservierung, schlägt nur dieser Eintrag fehl und der nächste wartende kommt dran.
+ * Setzt in einer Transaktion den Eintrag auf läuft, den die Startentscheidung nennt, und
+ * reserviert dabei seinen Dateinamen. So bekommen auch mehrere Slots nie denselben Namen. Pause
+ * und wartende Einträge liest sie in derselben Transaktion, ein „Pause queue“ gilt also sofort.
+ * Sind alle Suffixe belegt, schlägt nur dieser Eintrag fehl und der nächste kommt dran. Scheitert
+ * die Reservierung an der Umgebung, etwa an fehlenden Rechten auf `downloads/`, bleibt er wartend
+ * (`blocked`), denn jeder weitere Eintrag scheiterte genauso.
  * Einem Playlist-Eintrag ohne Medien-ID oder Titel reserviert erst der Slot den Namen, nach der Prüfung.
  */
-function claimNext({ db, dataDir, clock, log }: WorkerDeps): QueueEntry | undefined {
+function claimNext({ db, dataDir, slots, clock, log }: WorkerDeps, running: number): Claim {
   const downloadsDir = dataPaths(dataDir).downloads;
-  return db.transaction((tx) => {
+  return db.transaction((tx): Claim => {
     for (;;) {
-      const next = tx
-        .select()
+      const waiting = tx
+        .select({ id: queueEntries.id, queuedAt: queueEntries.queuedAt })
         .from(queueEntries)
         .where(eq(queueEntries.state, "waiting"))
-        .orderBy(asc(queueEntries.queuedAt), asc(queueEntries.id))
-        .limit(1)
-        .get();
-      if (!next) return undefined;
-      if (needsNaming(next)) {
-        return tx
+        .all();
+      const [candidate] = entriesToStart({ waiting, running, paused: isPaused(tx), slots });
+      if (!candidate) return { kind: "none" };
+      const next = tx.select().from(queueEntries).where(eq(queueEntries.id, candidate.id)).get()!;
+      const start = (fileName: string | null) => {
+        const entry = tx
           .update(queueEntries)
-          .set({ state: "running", phase: "download", fileName: null, cancelRequest: null })
+          .set({ state: "running", phase: "download", fileName, cancelRequest: null })
           .where(and(eq(queueEntries.id, next.id), eq(queueEntries.state, "waiting")))
           .returning()
           .get();
-      }
+        return entry ? ({ kind: "started", entry } as const) : ({ kind: "none" } as const);
+      };
+      if (needsNaming(next)) return start(null);
+      let fileName: string;
       try {
-        return tx
-          .update(queueEntries)
-          .set({
-            state: "running",
-            phase: "download",
-            fileName: reserveFileName(tx, downloadsDir, next),
-            cancelRequest: null,
-          })
-          .where(and(eq(queueEntries.id, next.id), eq(queueEntries.state, "waiting")))
-          .returning()
-          .get();
+        fileName = reserveFileName(tx, downloadsDir, next);
       } catch (error) {
+        if (!(error instanceof NoFreeFileName)) return { kind: "blocked", error };
         log.error(`queue entry ${next.id}: could not reserve a file name: ${errorText(error)}`);
         tx.update(queueEntries)
           .set({
@@ -158,7 +176,9 @@ function claimNext({ db, dataDir, clock, log }: WorkerDeps): QueueEntry | undefi
           })
           .where(eq(queueEntries.id, next.id))
           .run();
+        continue;
       }
+      return start(fileName);
     }
   });
 }

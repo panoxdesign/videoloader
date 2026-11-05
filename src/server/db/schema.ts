@@ -97,6 +97,20 @@ export const queueEntries = sqliteTable(
 export type QueueEntry = typeof queueEntries.$inferSelect;
 
 /**
+ * Zustand der ganzen Queue, höchstens eine Zeile (ID 1). Fehlt sie, ist die Queue nicht pausiert.
+ * Liegt in der DB, damit die Pause einen Neustart übersteht und der Worker sie per Poll sieht.
+ */
+export const queueState = sqliteTable(
+  "queue_state",
+  {
+    id: integer().primaryKey(),
+    /** „Pause queue“: Es startet nichts, laufende Einträge laden zu Ende. */
+    paused: integer({ mode: "boolean" }).notNull(),
+  },
+  (t) => [check("queue_state_single_row_check", sql`${t.id} = 1`)],
+);
+
+/**
  * Zwischenspeicher der Playlist-Vorschau, bis „Add x to queue“ einreiht. Der Browser kennt nur
  * den Schlüssel, Titel, Medien-IDs und Dateinamen kommen nie aus dem Browser. Eine Zeile gilt
  * etwa 15 min und wird beim Einreihen gelöscht.

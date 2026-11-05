@@ -4,7 +4,15 @@ import type { CancelRequest, EntryState } from "@/server/db/schema";
 /**
  * Auslöser aus Spec „Zustandsmodell des Queue-Eintrags“. Rate-Limit (Ticket 29) kommt später dazu.
  */
-export type EntryEvent = "start" | "succeed" | "fail" | "cancel" | "retry" | "remove";
+export type EntryEvent =
+  | "start"
+  | "succeed"
+  | "fail"
+  | "cancel"
+  | "retry"
+  | "remove"
+  | "clearWaiting"
+  | "clearFailedCancelled";
 
 /** Ein entfernter Eintrag ist kein Zustand, seine Zeile ist weg. */
 export type EntryTarget = EntryState | "removed";
@@ -19,6 +27,9 @@ const TRANSITIONS: Record<EntryEvent, Partial<Record<EntryState, EntryTarget>>> 
   retry: { failed: "waiting", cancelled: "waiting" },
   // Einen laufenden Eintrag bricht Remove erst ab und löscht ihn dann, ohne Umweg über abgebrochen.
   remove: { waiting: "removed", running: "removed", failed: "removed", cancelled: "removed" },
+  // Sammelaktionen im Menü „…“, nach Bestätigung. Laufende Einträge laden zu Ende.
+  clearWaiting: { waiting: "removed" },
+  clearFailedCancelled: { failed: "removed", cancelled: "removed" },
 };
 
 /** Der Zustand nach dem Auslöser, `undefined`, wenn der Übergang nicht erlaubt ist. */

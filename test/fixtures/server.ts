@@ -35,6 +35,11 @@ const PAGES: Record<string, { title: string; media?: "missing" | "cut" | "flaky"
   // Für „Cancel“ und „Retry“ im E2E (Ticket 22): Der erste Abruf des Mediums kommt gedrosselt,
   // damit Zeit zum Abbrechen bleibt, danach in voller Geschwindigkeit.
   "cancel-clip": { title: "Cancel Clip", media: "slowOnce" },
+  // Für Pause und Sammelaktionen im E2E (Ticket 28), je eine eigene Seite gegen Duplikat-Warnungen.
+  "pause-clip": { title: "Pause Clip" },
+  "clear-one": { title: "Clear One" },
+  "clear-two": { title: "Clear Two" },
+  "clear-gone": { title: "Clear Gone", media: "missing" },
 };
 
 /**

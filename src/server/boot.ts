@@ -39,6 +39,7 @@ export function boot() {
     db,
     ytDlpPath: BUNDLED_YTDLP,
     dataDir: config.dataDir,
+    slots: config.maxConcurrentDownloads,
     timing: PRODUCTION_TIMING,
     clock: systemClock,
     log,

@@ -13,7 +13,16 @@ import { duplicateKey, type Duplicate } from "@/server/duplicate";
 import { deleteDoneEntry } from "@/server/files/media-file";
 import { BUNDLED_YTDLP, dataDirFromEnv, dataPaths } from "@/server/paths";
 import { enqueuePlaylist, openPreview } from "@/server/playlist-preview";
-import { cancelEntry, enqueue, findDuplicateEntry, queuePosition, removeEntry, retryEntry } from "@/server/queue";
+import {
+  cancelEntry,
+  clearEntries,
+  enqueue,
+  findDuplicateEntry,
+  queuePosition,
+  removeEntry,
+  retryEntry,
+  setPaused,
+} from "@/server/queue";
 
 /** Die Duplikat-Warnung, mit dem vorhandenen Eintrag. */
 export type DuplicateWarning = {
@@ -140,5 +149,29 @@ export async function removeQueueEntry(id: number) {
 export async function cancelQueueEntry(id: number) {
   if (!Number.isSafeInteger(id)) return;
   cancelEntry(getDb(), id);
+  refresh();
+}
+
+/** „Pause queue“: Es startet nichts mehr, laufende Einträge laden zu Ende. Übersteht einen Neustart. */
+export async function pauseQueue() {
+  setPaused(getDb(), true);
+  refresh();
+}
+
+/** „Resume queue“: Der Worker startet im nächsten Tick wieder. Eine Abkühlphase endet dadurch nicht (Ticket 29). */
+export async function resumeQueue() {
+  setPaused(getDb(), false);
+  refresh();
+}
+
+/** „Clear waiting“ nach Bestätigung: entfernt alle Einträge, die jetzt noch warten. */
+export async function clearWaitingEntries() {
+  clearEntries(getDb(), "clearWaiting");
+  refresh();
+}
+
+/** „Clear failed & cancelled“ nach Bestätigung. Mediendateien haben diese Einträge nicht. */
+export async function clearFailedCancelledEntries() {
+  clearEntries(getDb(), "clearFailedCancelled");
   refresh();
 }

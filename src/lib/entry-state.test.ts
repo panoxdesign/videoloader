@@ -15,6 +15,9 @@ describe("transition", () => {
     ["cancelled", "retry", "waiting"],
     ["failed", "remove", "removed"],
     ["cancelled", "remove", "removed"],
+    ["waiting", "clearWaiting", "removed"],
+    ["failed", "clearFailedCancelled", "removed"],
+    ["cancelled", "clearFailedCancelled", "removed"],
   ] as const)("%s --%s--> %s", (from, event, to) => {
     expect(transition(from, event)).toBe(to);
   });
@@ -34,6 +37,12 @@ describe("transition", () => {
     ["failed", "start"],
     ["done", "fail"],
     ["waiting", "succeed"],
+    // Die Sammelaktionen treffen nur ihre Gruppe, nie laufende oder fertige Einträge.
+    ["running", "clearWaiting"],
+    ["failed", "clearWaiting"],
+    ["waiting", "clearFailedCancelled"],
+    ["running", "clearFailedCancelled"],
+    ["done", "clearFailedCancelled"],
   ] as const)("does not allow %s --%s-->", (from, event) => {
     expect(transition(from, event)).toBeUndefined();
   });
@@ -45,6 +54,8 @@ describe("statesAllowing", () => {
     ["remove", ["waiting", "running", "failed", "cancelled"]],
     ["cancel", ["running"]],
     ["start", ["waiting"]],
+    ["clearWaiting", ["waiting"]],
+    ["clearFailedCancelled", ["failed", "cancelled"]],
   ] as const)("%s from %j", (event: EntryEvent, states) => {
     expect(statesAllowing(event)).toEqual(states);
   });

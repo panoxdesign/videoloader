@@ -6,9 +6,9 @@ import { texts } from "@/lib/texts";
 import { getDb } from "@/server/db";
 import { findMediaFile } from "@/server/files/media-file";
 import { dataDirFromEnv, dataPaths } from "@/server/paths";
-import { listEntries } from "@/server/queue";
+import { isPaused, listEntries } from "@/server/queue";
 import { AddForm } from "./add-form";
-import { QueueList } from "./queue-list";
+import { PausedBanner, QueueList } from "./queue-list";
 import { RefreshEvery } from "./refresh-every";
 
 export default function Home() {
@@ -25,8 +25,7 @@ export default function Home() {
       <main className="mx-auto flex w-full max-w-[1120px] flex-col gap-3 p-4 sm:gap-4 sm:p-6">
         <AddForm />
 
-        {/* Tickets 28 und 29: Banner für Pause und Rate-Limit */}
-
+        {/* Die Banner für Pause (und mit Ticket 29 Rate-Limit) stehen in `Queue`, sie brauchen die DB. */}
         <Suspense>
           <Queue />
         </Suspense>
@@ -39,6 +38,7 @@ export default function Home() {
 async function Queue() {
   await connection();
   const { downloads } = dataPaths(dataDirFromEnv());
+  const paused = isPaused(getDb());
   const entries: EntryView[] = await Promise.all(
     listEntries(getDb()).map(async (entry) => ({
       id: entry.id,
@@ -61,5 +61,10 @@ async function Queue() {
       cancelling: entry.state === "running" && entry.cancelRequest !== null,
     })),
   );
-  return <QueueList entries={entries} />;
+  return (
+    <>
+      {paused && <PausedBanner />}
+      <QueueList entries={entries} paused={paused} />
+    </>
+  );
 }
